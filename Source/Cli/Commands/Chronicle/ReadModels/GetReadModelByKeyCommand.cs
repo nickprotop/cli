@@ -1,6 +1,7 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Text.Json.Nodes;
 using Grpc.Core;
 
 namespace Cratis.Cli.Commands.Chronicle.ReadModels;
@@ -52,11 +53,13 @@ public class GetReadModelByKeyCommand : ChronicleCommand<ReadModelKeySettings>
             return ExitCodes.NotFound;
         }
 
+        var cleanedReadModel = ReadModelJsonCleaner.CleanInstance(response.ReadModel);
+
         OutputFormatter.WriteObject(
             format,
             new
             {
-                response.ReadModel,
+                ReadModel = cleanedReadModel,
                 response.ProjectedEventsCount,
                 response.LastHandledEventSequenceNumber
             },
@@ -65,7 +68,9 @@ public class GetReadModelByKeyCommand : ChronicleCommand<ReadModelKeySettings>
                 AnsiConsole.MarkupLine($"[bold]ProjectedEvents:[/] {data.ProjectedEventsCount}");
                 AnsiConsole.MarkupLine($"[bold]LastHandled#:[/]    {data.LastHandledEventSequenceNumber}");
                 AnsiConsole.WriteLine();
-                AnsiConsole.WriteLine(data.ReadModel);
+                AnsiConsole.WriteLine(data.ReadModel is not null
+                    ? JsonSerializer.Serialize(data.ReadModel, OutputFormatter.IndentedJsonSerializerOptions)
+                    : response.ReadModel);
             });
 
         return ExitCodes.Success;

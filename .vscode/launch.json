@@ -5,6 +5,26 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "CLI: chronicle read-models instances",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/Source/Cli/bin/Debug/net10.0/Cratis.Cli.dll",
+            "args": [
+                "chronicle",
+                "read-models",
+                "instances",
+                "Studio.Projects.Applications.EventModels.EventModel"
+            ],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "internalConsole",
+            "env": {
+                "DOTNET_ENVIRONMENT": "Development"
+            },
+            "justMyCode": true
+        },
+        {
             "name": "launch",
             "type": "coreclr",
             "request": "launch",

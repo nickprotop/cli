@@ -1,6 +1,7 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using System.Text.Json.Nodes;
 using Grpc.Core;
 
 namespace Cratis.Cli.Commands.Chronicle.ReadModels;
@@ -52,7 +53,10 @@ public class GetReadModelInstancesCommand : ChronicleCommand<GetReadModelInstanc
             return ExitCodes.ServerError;
         }
 
-        var instances = (response.Instances ?? []).ToList();
+        var cleanedInstances = (response.Instances ?? [])
+            .Select(ReadModelJsonCleaner.CleanInstance)
+            .Where(obj => obj is not null)
+            .ToList();
 
         if (string.Equals(format, OutputFormats.Json, StringComparison.Ordinal) || string.Equals(format, OutputFormats.JsonCompact, StringComparison.Ordinal))
         {
@@ -63,57 +67,30 @@ public class GetReadModelInstancesCommand : ChronicleCommand<GetReadModelInstanc
                     response.TotalCount,
                     response.Page,
                     response.PageSize,
-                    Instances = instances
+                    Instances = cleanedInstances
                 });
         }
-        else if (instances.Count == 0)
+        else if (cleanedInstances.Count == 0)
         {
             Console.WriteLine($"Total: {response.TotalCount} | Page: {response.Page} | PageSize: {response.PageSize}");
             Console.WriteLine("(no instances)");
         }
         else
         {
-            // Parse all instances as JsonElement to extract dynamic column names
-            var parsed = new List<JsonElement>();
-            foreach (var raw in instances)
             {
-                try
-                {
-                    parsed.Add(JsonSerializer.Deserialize<JsonElement>(raw));
-                }
-                catch
-                {
-                    // If not valid JSON, skip structured rendering
-                }
-            }
-
-            if (parsed.Count == 0)
-            {
-                // Fallback to plain output
-                Console.WriteLine($"Total: {response.TotalCount} | Page: {response.Page} | PageSize: {response.PageSize}");
-                foreach (var instance in instances)
-                {
-                    Console.WriteLine(instance);
-                }
-            }
-            else
-            {
-                // Collect columns from first element
-                var columns = parsed[0].EnumerateObject().Select(p => p.Name).ToArray();
+                var columns = cleanedInstances[0]!.Select(p => p.Key).ToArray();
 
                 OutputFormatter.Write(
                     format,
-                    parsed,
+                    cleanedInstances,
                     columns,
                     element => [.. columns.Select(col =>
                     {
-                        if (element.TryGetProperty(col, out var prop))
-                        {
-                            return prop.ValueKind == JsonValueKind.String
-                                ? prop.GetString() ?? string.Empty
-                                : prop.ToString();
-                        }
-                        return string.Empty;
+                        var node = element![col];
+                        if (node is null) return string.Empty;
+                        return node is JsonValue v && v.TryGetValue<string>(out var str)
+                            ? str
+                            : node.ToJsonString();
                     })]);
             }
         }
