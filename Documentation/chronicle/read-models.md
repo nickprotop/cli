@@ -17,6 +17,10 @@ cratis chronicle read-models list
 | `-e, --event-store <NAME>` | Event store to inspect. Defaults to `default`. |
 | `-n, --namespace <NAME>` | Namespace to inspect. Defaults to `Default`. |
 
+### Output columns
+
+The table includes a **Queryable** column (`Yes`/`No`) indicating whether the read model stores state server-side and can be inspected with `get` or `instances`. Client-owned read models show `No` — their state lives in the client application and cannot be retrieved through the Chronicle server. The JSON output includes a `queryable` boolean field for programmatic use.
+
 ### Output tip
 
 Use `--output plain` when enumerating read model names. The plain format is approximately 27 times smaller than JSON because it omits the full type metadata included in the JSON output.

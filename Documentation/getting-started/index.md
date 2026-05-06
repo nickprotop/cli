@@ -34,7 +34,9 @@ cratis get-started
 cratis completions install
 ```
 
-Detects your current shell automatically. Use `--shell bash|zsh|fish` to target a specific shell. Restart your shell or source your profile to activate.
+Detects your current shell automatically. Use `--shell bash|zsh|fish|powershell` to target a specific shell. Restart your shell or source your profile to activate.
+
+On Windows, PowerShell is detected automatically. The installer writes the completion hook to your PowerShell profile (`$PROFILE`).
 
 ## Changing the Server
 

@@ -24,7 +24,7 @@ The command runs the following checks in sequence:
 | Check | What it verifies |
 |---|---|
 | Connection | The CLI can reach the Chronicle management API. |
-| Server version | The server responds with a valid version identifier. |
+| Server version | The server responds with a valid version identifier. The CLI also checks the NuGet feed for a newer Chronicle server release. When a newer version is available, a `▲` warning is shown next to the version in all output modes (table, plain, JSON, and watch). |
 | Event stores | At least one event store exists and is accessible. |
 | Observers | All observers are active and not stopped or faulted. |
 | Failed partitions | No observer partitions are in a failed state. |
