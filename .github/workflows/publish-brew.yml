@@ -1,0 +1,183 @@
+name: Publish Brew
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to publish'
+        required: true
+        type: string
+    secrets:
+      HOMEBREW_TAP_TOKEN:
+        required: true
+
+env:
+  DOTNET_VERSION: "10.0.x"
+
+jobs:
+  build-macos-arm64:
+    name: Build macOS arm64
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish Native AOT
+        run: dotnet publish Source/Cli/Cli.csproj -c Release -r osx-arm64 -p:PublishAot=true -p:Version=${{ inputs.version }} -o ./publish/osx-arm64
+
+      - name: Package
+        run: |
+          mv ./publish/osx-arm64/Cratis.Cli ./publish/osx-arm64/cratis
+          tar -czf cratis-${{ inputs.version }}-osx-arm64.tar.gz -C ./publish/osx-arm64 cratis
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cratis-osx-arm64
+          path: cratis-${{ inputs.version }}-osx-arm64.tar.gz
+
+  build-macos-x64:
+    name: Build macOS x64
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish Native AOT
+        run: dotnet publish Source/Cli/Cli.csproj -c Release -r osx-x64 -p:PublishAot=true -p:Version=${{ inputs.version }} -o ./publish/osx-x64
+
+      - name: Package
+        run: |
+          mv ./publish/osx-x64/Cratis.Cli ./publish/osx-x64/cratis
+          tar -czf cratis-${{ inputs.version }}-osx-x64.tar.gz -C ./publish/osx-x64 cratis
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cratis-osx-x64
+          path: cratis-${{ inputs.version }}-osx-x64.tar.gz
+
+  build-linux-x64:
+    name: Build Linux x64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install native AOT prerequisites
+        run: sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish Native AOT
+        run: dotnet publish Source/Cli/Cli.csproj -c Release -r linux-x64 -p:PublishAot=true -p:Version=${{ inputs.version }} -o ./publish/linux-x64
+
+      - name: Package
+        run: |
+          mv ./publish/linux-x64/Cratis.Cli ./publish/linux-x64/cratis
+          tar -czf cratis-${{ inputs.version }}-linux-x64.tar.gz -C ./publish/linux-x64 cratis
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cratis-linux-x64
+          path: cratis-${{ inputs.version }}-linux-x64.tar.gz
+
+  publish-brew:
+    name: Publish to Homebrew
+    runs-on: ubuntu-latest
+    needs: [build-macos-arm64, build-macos-x64, build-linux-x64]
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Compute checksums
+        id: checksums
+        run: |
+          ARM64_SHA=$(sha256sum ./artifacts/cratis-osx-arm64/cratis-${{ inputs.version }}-osx-arm64.tar.gz | awk '{print $1}')
+          X64_SHA=$(sha256sum ./artifacts/cratis-osx-x64/cratis-${{ inputs.version }}-osx-x64.tar.gz | awk '{print $1}')
+          LINUX_SHA=$(sha256sum ./artifacts/cratis-linux-x64/cratis-${{ inputs.version }}-linux-x64.tar.gz | awk '{print $1}')
+          echo "arm64_sha=$ARM64_SHA" >> "$GITHUB_OUTPUT"
+          echo "x64_sha=$X64_SHA" >> "$GITHUB_OUTPUT"
+          echo "linux_sha=$LINUX_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          files: |
+            ./artifacts/cratis-osx-arm64/cratis-${{ inputs.version }}-osx-arm64.tar.gz
+            ./artifacts/cratis-osx-x64/cratis-${{ inputs.version }}-osx-x64.tar.gz
+            ./artifacts/cratis-linux-x64/cratis-${{ inputs.version }}-linux-x64.tar.gz
+
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: Cratis/homebrew-cratis
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-cratis
+
+      - name: Update Homebrew formula
+        run: |
+          mkdir -p homebrew-cratis/Formula
+          cat > homebrew-cratis/Formula/cratis.rb << EOF
+          class Cratis < Formula
+            desc "Command-line tool for managing and exploring Chronicle event stores"
+            homepage "https://github.com/Cratis/cli"
+            version "${{ inputs.version }}"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/Cratis/cli/releases/download/v${{ inputs.version }}/cratis-${{ inputs.version }}-osx-arm64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.arm64_sha }}"
+              end
+              on_intel do
+                url "https://github.com/Cratis/cli/releases/download/v${{ inputs.version }}/cratis-${{ inputs.version }}-osx-x64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.x64_sha }}"
+              end
+            end
+            on_linux do
+              url "https://github.com/Cratis/cli/releases/download/v${{ inputs.version }}/cratis-${{ inputs.version }}-linux-x64.tar.gz"
+              sha256 "${{ steps.checksums.outputs.linux_sha }}"
+            end
+
+            def install
+              bin.install "cratis"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/cratis --version")
+            end
+          end
+          EOF
+
+      - name: Commit and push formula
+        run: |
+          cd homebrew-cratis
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/cratis.rb
+          git commit -m "Update cratis to ${{ inputs.version }}"
+          git push
