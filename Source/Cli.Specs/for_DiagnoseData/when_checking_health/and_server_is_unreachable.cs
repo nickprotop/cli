@@ -15,6 +15,7 @@ public class and_server_is_unreachable : Specification
         Namespace: "Default",
         ServerReachable: false,
         ServerVersion: null,
+        LatestServerVersion: null,
         EventStores: [],
         ActiveObservers: 0,
         ReplayingObservers: 0,

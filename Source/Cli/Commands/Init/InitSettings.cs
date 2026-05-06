@@ -30,4 +30,13 @@ public class InitSettings : GlobalSettings
     [Description("Skip generating slash commands / prompt files")]
     [DefaultValue(false)]
     public bool NoCommands { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to re-capture the llm-context snapshot
+    /// in CHRONICLE.md without reconfiguring AI tool integrations.
+    /// </summary>
+    [CommandOption("--refresh")]
+    [Description("Re-capture the llm-context snapshot in CHRONICLE.md. Skips AI tool configuration.")]
+    [DefaultValue(false)]
+    public bool Refresh { get; set; }
 }

@@ -15,6 +15,7 @@ public class and_everything_is_healthy : Specification
         Namespace: "Default",
         ServerReachable: true,
         ServerVersion: "15.6.1",
+        LatestServerVersion: null,
         EventStores: ["default"],
         ActiveObservers: 5,
         ReplayingObservers: 3,

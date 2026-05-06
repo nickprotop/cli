@@ -6,7 +6,7 @@ namespace Cratis.Cli.Commands.Chronicle.ReadModels;
 /// <summary>
 /// Lists read model definitions in an event store.
 /// </summary>
-[LlmDescription("Lists all read model definitions registered in the namespace. Use -o plain for large catalogues. Use to discover available types before calling 'get' or 'instances'.")]
+[LlmDescription("Lists all read model definitions registered in the namespace. Use -o plain for large catalogues. Use to discover available types before calling 'get' or 'instances'. Check the 'queryable' field: false means the model is client-owned (Owner: Client) and 'get'/'instances' will fail for it — the client application stores its state, not the Chronicle server.")]
 [CliCommand("list", "List read model definitions", Branch = typeof(ChronicleBranch.ReadModels))]
 [CliExample("chronicle", "read-models", "list")]
 [LlmOutputAdvice("plain", "plain is ~27x smaller (1.5KB vs 40KB). JSON includes full schema blobs per read model.")]
@@ -31,6 +31,7 @@ public class ListReadModelsCommand : ChronicleCommand<EventStoreSettings>
                 observerType = rm.ObserverType.ToString(),
                 observerIdentifier = rm.ObserverIdentifier,
                 owner = rm.Owner.ToString(),
+                queryable = !string.Equals(rm.Owner.ToString(), "Client", StringComparison.Ordinal),
                 source = rm.Source.ToString()
             });
             OutputFormatter.WriteObject(format, dtos);
@@ -40,7 +41,7 @@ public class ListReadModelsCommand : ChronicleCommand<EventStoreSettings>
             OutputFormatter.Write(
                 format,
                 response.ReadModels,
-                ["Identifier", "Container", "DisplayName", "ObserverType", "Owner", "Source"],
+                ["Identifier", "Container", "DisplayName", "ObserverType", "Owner", "Queryable", "Source"],
                 rm =>
                 [
                     rm.Type?.Identifier ?? string.Empty,
@@ -48,6 +49,7 @@ public class ListReadModelsCommand : ChronicleCommand<EventStoreSettings>
                     rm.DisplayName,
                     rm.ObserverType.ToString(),
                     rm.Owner.ToString(),
+                    string.Equals(rm.Owner.ToString(), "Client", StringComparison.Ordinal) ? "No" : "Yes",
                     rm.Source.ToString()
                 ]);
         }

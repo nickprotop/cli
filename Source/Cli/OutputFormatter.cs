@@ -57,7 +57,12 @@ public static class OutputFormatter
     /// </summary>
     public static readonly JsonSerializerOptions JsonSerializerOptions = CreateDefaultOptions(indented: false);
 
-    static readonly JsonSerializerOptions _jsonOptions = CreateDefaultOptions(indented: true);
+    /// <summary>
+    /// The indented JSON serializer options used for CLI output (camelCase, null-omitting, indented).
+    /// </summary>
+    public static readonly JsonSerializerOptions IndentedJsonSerializerOptions = CreateDefaultOptions(indented: true);
+
+    static readonly JsonSerializerOptions _jsonOptions = IndentedJsonSerializerOptions;
     static readonly JsonSerializerOptions _compactJsonOptions = JsonSerializerOptions;
 
     /// <summary>

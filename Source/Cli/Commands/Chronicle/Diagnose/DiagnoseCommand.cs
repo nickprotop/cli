@@ -68,6 +68,18 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
             serverReachable = false;
         }
 
+        // Latest server version from package feed (non-blocking, best-effort)
+        string? latestServerVersion = null;
+        if (serverVersion is not null)
+        {
+            try
+            {
+                using var updateCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                latestServerVersion = await UpdateChecker.CheckForUpdate(UpdateChecker.ServerPackageId, serverVersion, updateCts.Token);
+            }
+            catch { }
+        }
+
         // Event stores
         var eventStores = new List<string>();
         try
@@ -143,6 +155,7 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
             Namespace: ns,
             ServerReachable: serverReachable,
             ServerVersion: serverVersion,
+            LatestServerVersion: latestServerVersion,
             EventStores: eventStores,
             ActiveObservers: activeObservers,
             ReplayingObservers: replayingObservers,
@@ -169,7 +182,8 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
                 },
                 version = new
                 {
-                    server = data.ServerVersion
+                    server = data.ServerVersion,
+                    latestServer = data.LatestServerVersion
                 },
                 eventStores = data.EventStores,
                 observers = new
@@ -216,7 +230,16 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
 
         if (data.ServerReachable)
         {
-            WriteCheck(true, "Server version", data.ServerVersion ?? "unknown");
+            if (data.LatestServerVersion is not null)
+            {
+                var serverVersionText = (data.ServerVersion ?? "unknown").EscapeMarkup();
+                var latestVersionText = data.LatestServerVersion.EscapeMarkup();
+                WriteCheck(false, "Server version", $"{serverVersionText}  [{OutputFormatter.Warning.ToMarkup()}]update available: {latestVersionText}[/]  [{OutputFormatter.Muted.ToMarkup()}]→ upgrade the Chronicle server[/]", isWarning: true);
+            }
+            else
+            {
+                WriteCheck(true, "Server version", data.ServerVersion ?? "unknown");
+            }
         }
 
         var eventStoreStatus = data.EventStores.Count switch
@@ -288,10 +311,14 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
         return string.Join("  ", parts);
     }
 
-    static void WriteCheck(bool ok, string label, string detail, bool isInfo = false)
+    static void WriteCheck(bool ok, string label, string detail, bool isInfo = false, bool isWarning = false)
     {
         string icon;
-        if (ok)
+        if (isWarning)
+        {
+            icon = $"[{OutputFormatter.Warning.ToMarkup()}]▲[/]";
+        }
+        else if (ok)
         {
             icon = $"[{OutputFormatter.Success.ToMarkup()}]✓[/]";
         }
@@ -313,6 +340,7 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
         Console.WriteLine($"server={RedactConnectionString(data.ConnectionString)}");
         Console.WriteLine($"reachable={data.ServerReachable}");
         Console.WriteLine($"server_version={data.ServerVersion ?? string.Empty}");
+        Console.WriteLine($"server_version_latest={data.LatestServerVersion ?? string.Empty}");
         Console.WriteLine($"event_stores={data.EventStores.Count}");
         Console.WriteLine($"observers_active={data.ActiveObservers}");
         Console.WriteLine($"observers_replaying={data.ReplayingObservers}");
@@ -340,6 +368,7 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
             Namespace: settings.ResolveNamespace(),
             ServerReachable: false,
             ServerVersion: null,
+            LatestServerVersion: null,
             EventStores: [],
             ActiveObservers: 0,
             ReplayingObservers: 0,
@@ -390,10 +419,13 @@ public partial class DiagnoseCommand : ChronicleCommand<DiagnoseSettings>
 
         if (data.ServerReachable)
         {
-            table.AddRow(
-                $"[{OutputFormatter.Muted.ToMarkup()}]·[/]",
-                $"[{OutputFormatter.Accent.ToMarkup()}]Server version[/]",
-                (data.ServerVersion ?? "unknown").EscapeMarkup());
+            var serverVersionCell = data.LatestServerVersion is not null
+                ? $"{(data.ServerVersion ?? "unknown").EscapeMarkup()}  [{OutputFormatter.Warning.ToMarkup()}]↑ {data.LatestServerVersion.EscapeMarkup()}[/]"
+                : (data.ServerVersion ?? "unknown").EscapeMarkup();
+            var serverVersionIcon = data.LatestServerVersion is not null
+                ? $"[{OutputFormatter.Warning.ToMarkup()}]▲[/]"
+                : $"[{OutputFormatter.Muted.ToMarkup()}]·[/]";
+            table.AddRow(serverVersionIcon, $"[{OutputFormatter.Accent.ToMarkup()}]Server version[/]", serverVersionCell);
         }
 
         var observersIcon = $"[{OutputFormatter.Success.ToMarkup()}]✓[/]";

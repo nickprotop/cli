@@ -1,9 +1,5 @@
 # Getting Started
 
-This page walks you through installing the `cratis` CLI, verifying it works, setting up your first connection context, and running your first commands against a Chronicle server.
-
-## Installation
-
 Install the CLI as a .NET global tool:
 
 ```bash
@@ -16,100 +12,73 @@ To upgrade an existing installation:
 dotnet tool update -g Cratis.Cli
 ```
 
-## Verification
+## First Run
 
-Confirm the tool is on your PATH and check the installed version:
+The first time you run any `cratis` command, the CLI automatically creates a `default` context pointing at `chronicle://localhost:35000/?disableTls=true`. No manual setup is required to get started against a local Chronicle server.
+
+Running `cratis` with no arguments prints the active context name and server URL:
 
 ```bash
-cratis --version
+cratis
 ```
 
-The command prints the CLI version. If it also successfully reaches a configured server, it prints the server version alongside it.
+Run `cratis get-started` to test the server connection and see a summary of useful commands:
+
+```bash
+cratis get-started
+```
 
 ## Shell Completions
-
-The CLI provides tab completions for all commands, options, and arguments. Install completions for your shell:
 
 ```bash
 cratis completions install
 ```
 
-By default, the command detects your current shell. Use `--shell` to target a specific shell:
+Detects your current shell automatically. Use `--shell bash|zsh|fish|powershell` to target a specific shell. Restart your shell or source your profile to activate.
+
+On Windows, PowerShell is detected automatically. The installer writes the completion hook to your PowerShell profile (`$PROFILE`).
+
+## Changing the Server
+
+The auto-created `default` context points at `localhost:35000`. To point it at a different server:
 
 ```bash
-cratis completions install --shell bash
-cratis completions install --shell zsh
-cratis completions install --shell fish
+cratis context set-value server chronicle://myserver.example.com:35000/
 ```
 
-Use `--force` to overwrite an existing completion script:
+To create a separate named context for a different environment:
 
 ```bash
-cratis completions install --shell zsh --force
+cratis context create staging --server chronicle://staging.example.com:35000/
+cratis context set staging
 ```
 
-After installing, restart your shell or source your profile to activate completions.
-
-## The get-started Command
-
-Run `cratis get-started` at any time to check your configuration, test the server connection, and see a summary of useful commands:
-
-```bash
-cratis get-started
-```
-
-When no context is configured and no `CHRONICLE_CONNECTION_STRING` environment variable is set, the command shows a panel explaining the next steps — for example:
-
-```
-No context configured.
-Run 'cratis context create <NAME> --server <CONNECTION_STRING>' to create one,
-or set the CHRONICLE_CONNECTION_STRING environment variable.
-```
-
-When a context is configured and the server is reachable, the command confirms the connection and lists key commands for common tasks such as listing event stores, replaying observers, and inspecting failed partitions.
-
-## Setting Up a Context
-
-A context is a named, saved connection to a Chronicle server. Create one for your local development environment:
-
-```bash
-cratis context create dev --server chronicle://localhost:35000/?disableTls=true
-```
-
-Set it as the active context:
-
-```bash
-cratis context set dev
-```
-
-Verify the connection:
-
-```bash
-cratis get-started
-```
-
-The command confirms that the CLI can reach the server and shows the Chronicle server version.
-
-For full context management — listing, renaming, deleting, and setting individual values — see the [Context](../context/index.md) page.
+For full context management see the [Context](../context/index.md) page.
 
 ## Using an Environment Variable
 
-As an alternative to contexts, set `CHRONICLE_CONNECTION_STRING` in your shell or CI environment:
-
-```bash
-export CHRONICLE_CONNECTION_STRING=chronicle://localhost:35000/?disableTls=true
-```
-
-The CLI reads this variable when no `--server` flag is provided and no active context is set. This is convenient for automation and containerized environments where managing a config file is not practical.
+As an alternative to contexts, set `CHRONICLE_CONNECTION_STRING` in your shell or CI environment. This is convenient for automation and containers.
 
 The full resolution order is: `--server` flag > `CHRONICLE_CONNECTION_STRING` > active context > default `chronicle://localhost:35000/?disableTls=true`.
 
 ## AI Tool Integration
 
-Run `cratis init` to generate an LLM context file in the current directory. This file gives AI coding tools such as Claude Code, Cursor, or Windsurf a compact description of the CLI's capabilities and output formats, enabling them to write accurate `cratis` commands without guessing:
+Run `cratis init` in your project directory to configure AI tools (Claude Code, GitHub Copilot, Cursor, Windsurf). It generates a `CHRONICLE.md` file containing the full command catalog as embedded JSON, installs tool-specific instruction files, and adds a `chronicle-diagnose` slash command:
 
 ```bash
 cratis init
 ```
 
-The command writes the context file and prints the path. Add it to your project's AI configuration as instructed by your tool.
+When the CLI updates, refresh the embedded snapshot:
+
+```bash
+cratis init --refresh
+```
+
+For a live JSON descriptor of all CLI capabilities (same data embedded in `CHRONICLE.md`):
+
+```bash
+cratis llm-context
+cratis llm-context --schema   # JSON Schema for the descriptor format
+```
+

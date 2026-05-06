@@ -1,6 +1,8 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using Cratis.Cli.Commands.LlmContext;
+
 namespace Cratis.Cli.Commands.Init;
 
 /// <summary>
@@ -14,6 +16,7 @@ namespace Cratis.Cli.Commands.Init;
 [LlmOption("--force", "bool", "Overwrite existing files")]
 [LlmOption("--tool", "string", "Target a specific AI tool: claude, copilot, cursor, windsurf. Omit to auto-detect.")]
 [LlmOption("--no-commands", "bool", "Skip generating slash commands / prompt files")]
+[LlmOption("--refresh", "bool", "Re-capture the llm-context snapshot in CHRONICLE.md without reconfiguring AI tool integrations.")]
 public class InitCommand : AsyncCommand<InitSettings>
 {
     /// <inheritdoc/>
@@ -24,14 +27,39 @@ public class InitCommand : AsyncCommand<InitSettings>
         var chronicleMdPath = Path.Combine(basePath, "CHRONICLE.md");
         var allActions = new List<string>();
 
+        // --refresh: re-capture llm-context snapshot only, skip tool configuration
+        if (settings.Refresh)
+        {
+            var existed = File.Exists(chronicleMdPath);
+            var refreshJson = LlmContextCommand.BuildDescriptorJson();
+            var refreshContent = ChronicleDocGenerator.Generate();
+            await File.WriteAllTextAsync(chronicleMdPath, refreshContent, cancellationToken);
+            var refreshActions = new List<string> { existed ? "Refreshed CHRONICLE.md" : "Created CHRONICLE.md" };
+            refreshActions.AddRange(AiToolConfigurator.RefreshSkillFiles(basePath, refreshJson));
+
+            if (!string.Equals(format, OutputFormats.Quiet, StringComparison.Ordinal))
+            {
+                foreach (var a in refreshActions)
+                {
+                    OutputFormatter.WriteMessage(format, a);
+                }
+            }
+
+            return ExitCodes.Success;
+        }
+
         // Step 1: Generate CHRONICLE.md
+        string llmJson;
+
         if (File.Exists(chronicleMdPath) && !settings.Force)
         {
             allActions.Add("CHRONICLE.md already exists (skipped, use --force to overwrite)");
+            llmJson = LlmContextCommand.BuildDescriptorJson();
         }
         else
         {
             var existed = File.Exists(chronicleMdPath);
+            llmJson = LlmContextCommand.BuildDescriptorJson();
             var content = ChronicleDocGenerator.Generate();
             await File.WriteAllTextAsync(chronicleMdPath, content, cancellationToken);
             allActions.Add(existed ? "Overwrote CHRONICLE.md" : "Created CHRONICLE.md");
@@ -65,7 +93,7 @@ public class InitCommand : AsyncCommand<InitSettings>
             var includeCommands = !settings.NoCommands;
             foreach (var tool in tools)
             {
-                var actions = AiToolConfigurator.Configure(tool, basePath, settings.Force, includeCommands);
+                var actions = AiToolConfigurator.Configure(tool, basePath, settings.Force, includeCommands, llmJson);
                 allActions.AddRange(actions);
             }
         }

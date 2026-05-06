@@ -15,6 +15,7 @@ public class and_failed_partitions_exist : Specification
         Namespace: "Default",
         ServerReachable: true,
         ServerVersion: "15.6.1",
+        LatestServerVersion: null,
         EventStores: ["default"],
         ActiveObservers: 5,
         ReplayingObservers: 0,

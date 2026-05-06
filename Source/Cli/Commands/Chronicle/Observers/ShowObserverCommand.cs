@@ -70,6 +70,14 @@ public class ShowObserverCommand : ChronicleCommand<ObserverCommandSettings>
                 AnsiConsole.MarkupLine($"[bold]LastHandled#:[/] {(lastHandled.HasValue ? lastHandled.Value.ToString() : "(never)")}");
                 AnsiConsole.MarkupLine($"[bold]Subscribed:[/]   {data.isSubscribed}");
                 AnsiConsole.MarkupLine($"[bold]EventTypes:[/]   {string.Join(", ", data.eventTypes)}");
+
+                if (info.RunningState == ObserverRunningState.Disconnected)
+                {
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine($"  [{OutputFormatter.Warning.ToMarkup()}]▲ Observer is disconnected — no client is currently subscribed.[/]");
+                    AnsiConsole.MarkupLine($"  [{OutputFormatter.Muted.ToMarkup()}]The client application is likely offline or has not reconnected.[/]");
+                    AnsiConsole.MarkupLine($"  [{OutputFormatter.Muted.ToMarkup()}]Disconnect reason and timestamp are not surfaced by the server API.[/]");
+                }
             });
 
         return ExitCodes.Success;
