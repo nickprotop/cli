@@ -9,7 +9,7 @@ namespace Cratis.Cli.Registration;
 /// Chronicle server commands branch. Contains all sub-branches for event stores,
 /// observers, events, etc.
 /// </summary>
-[CliBranch("chronicle", "Commands for interacting with a Chronicle server. Contains sub-branches for event stores, namespaces, event types, events, observers, projections, read models, jobs, failed partitions, recommendations, identities, auth, users, and applications.")]
+[CliBranch("chronicle", "Commands for interacting with a Chronicle server. Contains sub-branches for event stores, namespaces, event types, events, observers, event store subscriptions, projections, read models, jobs, failed partitions, recommendations, identities, auth, users, and applications.")]
 public static class ChronicleBranch
 {
     /// <summary>Event store management.</summary>
@@ -31,6 +31,10 @@ public static class ChronicleBranch
     /// <summary>Observer management (reactors, reducers, projections).</summary>
     [CliBranch("observers", "Manage observers (projections, reactors, reducers, client observers). Supports listing, inspecting, replaying, and recovering failed partitions.")]
     public static class Observers { }
+
+    /// <summary>Event store subscription management.</summary>
+    [CliBranch("event-store-subscriptions", "Manage event store subscriptions for cross-store event flow. Supports listing, adding, and removing subscriptions.")]
+    public static class EventStoreSubscriptions { }
 
     /// <summary>Failed partition inspection.</summary>
     [CliBranch("failed-partitions", "List and inspect observer partitions that have failed and are paused. Use to diagnose and recover from processing failures.")]

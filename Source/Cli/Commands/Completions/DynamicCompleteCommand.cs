@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using Cratis.Chronicle.Contracts.Jobs;
+using Cratis.Chronicle.Contracts.Observation.EventStoreSubscriptions;
 using Cratis.Cli.Commands.Chronicle;
 
 namespace Cratis.Cli.Commands.Completions;
@@ -151,6 +152,18 @@ public class DynamicCompleteCommand : ChronicleCommand<DynamicCompleteSettings>
                     foreach (var app in apps ?? [])
                     {
                         Console.WriteLine(app.Id);
+                    }
+
+                    break;
+
+                case "event-store-subscriptions":
+                    var subscriptions = await services.EventStoreSubscriptions.GetSubscriptions(new GetEventStoreSubscriptionsRequest
+                    {
+                        TargetEventStore = eventStore
+                    });
+                    foreach (var subscription in subscriptions ?? [])
+                    {
+                        Console.WriteLine(subscription.Identifier);
                     }
 
                     break;
