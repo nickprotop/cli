@@ -104,10 +104,10 @@ jobs:
       - name: Push NuGet packages
         run: dotnet nuget push --skip-duplicate '${{ env.NUGET_OUTPUT }}/*.nupkg' --timeout 900 --api-key ${{steps.login.outputs.NUGET_API_KEY}} --source https://api.nuget.org/v3/index.json
 
-  publish-brew:
+  publish-native:
     if: needs.release.outputs.publish == 'true'
     needs: [release]
-    uses: ./.github/workflows/publish-brew.yml
+    uses: ./.github/workflows/publish-native.yml
     with:
       version: ${{ needs.release.outputs.version }}
     secrets:

@@ -20,12 +20,22 @@ brew upgrade cratis
 Download and install the pre-built native binary from the [latest release](https://github.com/Cratis/cli/releases/latest):
 
 ```bash
+# x64 (Intel/AMD)
 curl -Lo cratis.tar.gz https://github.com/Cratis/cli/releases/latest/download/cratis-linux-x64.tar.gz
+# arm64
+# curl -Lo cratis.tar.gz https://github.com/Cratis/cli/releases/latest/download/cratis-linux-arm64.tar.gz
 tar -xzf cratis.tar.gz
 sudo mv cratis /usr/local/bin/cratis
 ```
 
 To upgrade, repeat the steps above with the new release.
+
+Native release artifact names:
+
+| Platform | x64 | arm64 |
+| --- | --- | --- |
+| macOS | `cratis-<version>-osx-x64.tar.gz` | `cratis-<version>-osx-arm64.tar.gz` |
+| Linux | `cratis-<version>-linux-x64.tar.gz` | `cratis-<version>-linux-arm64.tar.gz` |
 
 ### .NET Global Tool
 
@@ -110,4 +120,3 @@ For a live JSON descriptor of all CLI capabilities (same data embedded in `CHRON
 cratis llm-context
 cratis llm-context --schema   # JSON Schema for the descriptor format
 ```
-

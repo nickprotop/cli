@@ -1,4 +1,4 @@
-name: Publish Brew
+name: Publish Native
 
 on:
   workflow_call:
@@ -96,10 +96,37 @@ jobs:
           name: cratis-linux-x64
           path: cratis-${{ inputs.version }}-linux-x64.tar.gz
 
-  publish-brew:
+  build-linux-arm64:
+    name: Build Linux arm64
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish
+        run: dotnet publish Source/Cli/Cli.csproj -c Release -r linux-arm64 -p:SelfContained=true -p:PublishSingleFile=true -p:Version=${{ inputs.version }} -o ./publish/linux-arm64
+
+      - name: Package
+        run: |
+          mv ./publish/linux-arm64/Cratis.Cli ./publish/linux-arm64/cratis
+          tar -czf cratis-${{ inputs.version }}-linux-arm64.tar.gz -C ./publish/linux-arm64 cratis
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cratis-linux-arm64
+          path: cratis-${{ inputs.version }}-linux-arm64.tar.gz
+
+  publish-homebrew:
     name: Publish to Homebrew
     runs-on: ubuntu-latest
-    needs: [build-macos-arm64, build-macos-x64, build-linux-x64]
+    needs: [build-macos-arm64, build-macos-x64, build-linux-x64, build-linux-arm64]
 
     permissions:
       contents: write
@@ -115,10 +142,12 @@ jobs:
         run: |
           ARM64_SHA=$(sha256sum ./artifacts/cratis-osx-arm64/cratis-${{ inputs.version }}-osx-arm64.tar.gz | awk '{print $1}')
           X64_SHA=$(sha256sum ./artifacts/cratis-osx-x64/cratis-${{ inputs.version }}-osx-x64.tar.gz | awk '{print $1}')
-          LINUX_SHA=$(sha256sum ./artifacts/cratis-linux-x64/cratis-${{ inputs.version }}-linux-x64.tar.gz | awk '{print $1}')
+          LINUX_X64_SHA=$(sha256sum ./artifacts/cratis-linux-x64/cratis-${{ inputs.version }}-linux-x64.tar.gz | awk '{print $1}')
+          LINUX_ARM64_SHA=$(sha256sum ./artifacts/cratis-linux-arm64/cratis-${{ inputs.version }}-linux-arm64.tar.gz | awk '{print $1}')
           echo "arm64_sha=$ARM64_SHA" >> "$GITHUB_OUTPUT"
           echo "x64_sha=$X64_SHA" >> "$GITHUB_OUTPUT"
-          echo "linux_sha=$LINUX_SHA" >> "$GITHUB_OUTPUT"
+          echo "linux_x64_sha=$LINUX_X64_SHA" >> "$GITHUB_OUTPUT"
+          echo "linux_arm64_sha=$LINUX_ARM64_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
@@ -128,6 +157,7 @@ jobs:
             ./artifacts/cratis-osx-arm64/cratis-${{ inputs.version }}-osx-arm64.tar.gz
             ./artifacts/cratis-osx-x64/cratis-${{ inputs.version }}-osx-x64.tar.gz
             ./artifacts/cratis-linux-x64/cratis-${{ inputs.version }}-linux-x64.tar.gz
+            ./artifacts/cratis-linux-arm64/cratis-${{ inputs.version }}-linux-arm64.tar.gz
 
       - name: Checkout Homebrew tap
         uses: actions/checkout@v4
@@ -156,8 +186,14 @@ jobs:
               end
             end
             on_linux do
-              url "https://github.com/Cratis/cli/releases/download/v${{ inputs.version }}/cratis-${{ inputs.version }}-linux-x64.tar.gz"
-              sha256 "${{ steps.checksums.outputs.linux_sha }}"
+              on_arm do
+                url "https://github.com/Cratis/cli/releases/download/v${{ inputs.version }}/cratis-${{ inputs.version }}-linux-arm64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_arm64_sha }}"
+              end
+              on_intel do
+                url "https://github.com/Cratis/cli/releases/download/v${{ inputs.version }}/cratis-${{ inputs.version }}-linux-x64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_x64_sha }}"
+              end
             end
 
             def install
