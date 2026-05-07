@@ -33,7 +33,7 @@ public static class ChronicleBranch
     public static class Observers { }
 
     /// <summary>Event store subscription management.</summary>
-    [CliBranch("event-store-subscriptions", "Manage event store subscriptions for cross-store event flow. Supports listing, adding, and removing subscriptions.")]
+    [CliBranch("subscriptions", "Manage event store subscriptions for cross-store event flow. Supports listing, adding, and removing subscriptions.")]
     public static class EventStoreSubscriptions { }
 
     /// <summary>Failed partition inspection.</summary>

@@ -156,7 +156,7 @@ public class DynamicCompleteCommand : ChronicleCommand<DynamicCompleteSettings>
 
                     break;
 
-                case "event-store-subscriptions":
+                case "subscriptions":
                     var subscriptions = await services.EventStoreSubscriptions.GetSubscriptions(new GetEventStoreSubscriptionsRequest
                     {
                         TargetEventStore = eventStore

@@ -10,7 +10,7 @@ namespace Cratis.Cli.Commands.Chronicle.EventStoreSubscriptions;
 /// </summary>
 [LlmDescription("Adds an event store subscription to a target event store.")]
 [CliCommand("add", "Add an event store subscription", Branch = typeof(ChronicleBranch.EventStoreSubscriptions))]
-[CliExample("chronicle", "event-store-subscriptions", "add", "orders-from-default", "default", "MyCompany.Sales.OrderPlaced")]
+[CliExample("chronicle", "subscriptions", "add", "orders-from-default", "default", "MyCompany.Sales.OrderPlaced")]
 [LlmOutputAdvice("plain", "Plain outputs a simple confirmation message.")]
 [LlmOption("<SUBSCRIPTION_ID>", "string", "The unique subscription identifier (positional)")]
 [LlmOption("<SOURCE_EVENT_STORE>", "string", "The source event store to subscribe to (positional)")]

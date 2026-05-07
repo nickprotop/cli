@@ -7,7 +7,7 @@ Event store subscriptions let one event store consume events produced in another
 Lists all event store subscriptions configured for the target event store.
 
 ```bash
-cratis chronicle event-store-subscriptions list --event-store <TARGET_EVENT_STORE>
+cratis chronicle subscriptions list --event-store <TARGET_EVENT_STORE>
 ```
 
 ### Examples
@@ -15,13 +15,13 @@ cratis chronicle event-store-subscriptions list --event-store <TARGET_EVENT_STOR
 List subscriptions for the `system` event store:
 
 ```bash
-cratis chronicle event-store-subscriptions list --event-store system
+cratis chronicle subscriptions list --event-store system
 ```
 
 List in plain format:
 
 ```bash
-cratis chronicle event-store-subscriptions list --event-store system --output plain
+cratis chronicle subscriptions list --event-store system --output plain
 ```
 
 ## add
@@ -29,7 +29,7 @@ cratis chronicle event-store-subscriptions list --event-store system --output pl
 Adds an event store subscription to the target event store.
 
 ```bash
-cratis chronicle event-store-subscriptions add <SUBSCRIPTION_ID> <SOURCE_EVENT_STORE> <EVENT_TYPES> --event-store <TARGET_EVENT_STORE>
+cratis chronicle subscriptions add <SUBSCRIPTION_ID> <SOURCE_EVENT_STORE> <EVENT_TYPES> --event-store <TARGET_EVENT_STORE>
 ```
 
 ### Arguments
@@ -45,13 +45,13 @@ cratis chronicle event-store-subscriptions add <SUBSCRIPTION_ID> <SOURCE_EVENT_S
 Add a subscription from `default` to `system` for one event type:
 
 ```bash
-cratis chronicle event-store-subscriptions add orders-from-default default MyCompany.Sales.OrderPlaced --event-store system
+cratis chronicle subscriptions add orders-from-default default MyCompany.Sales.OrderPlaced --event-store system
 ```
 
 Add a subscription with multiple event types:
 
 ```bash
-cratis chronicle event-store-subscriptions add sales-feed default MyCompany.Sales.OrderPlaced,MyCompany.Sales.OrderCancelled --event-store system
+cratis chronicle subscriptions add sales-feed default MyCompany.Sales.OrderPlaced,MyCompany.Sales.OrderCancelled --event-store system
 ```
 
 ## remove
@@ -59,7 +59,7 @@ cratis chronicle event-store-subscriptions add sales-feed default MyCompany.Sale
 Removes an event store subscription from the target event store.
 
 ```bash
-cratis chronicle event-store-subscriptions remove <SUBSCRIPTION_ID> --event-store <TARGET_EVENT_STORE>
+cratis chronicle subscriptions remove <SUBSCRIPTION_ID> --event-store <TARGET_EVENT_STORE>
 ```
 
 The command prompts for confirmation before proceeding. Pass `--yes` to skip the prompt in automated workflows.
@@ -68,7 +68,7 @@ The command prompts for confirmation before proceeding. Pass `--yes` to skip the
 
 | Argument | Description |
 |---|---|
-| `SUBSCRIPTION_ID` | Identifier of the subscription to remove. Use `event-store-subscriptions list` to retrieve IDs. |
+| `SUBSCRIPTION_ID` | Identifier of the subscription to remove. Use `subscriptions list` to retrieve IDs. |
 
 ### Options
 
@@ -81,11 +81,11 @@ The command prompts for confirmation before proceeding. Pass `--yes` to skip the
 Remove a subscription interactively:
 
 ```bash
-cratis chronicle event-store-subscriptions remove orders-from-default --event-store system
+cratis chronicle subscriptions remove orders-from-default --event-store system
 ```
 
 Remove without confirmation:
 
 ```bash
-cratis chronicle event-store-subscriptions remove orders-from-default --event-store system --yes
+cratis chronicle subscriptions remove orders-from-default --event-store system --yes
 ```

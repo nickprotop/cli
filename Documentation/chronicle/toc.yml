@@ -10,7 +10,7 @@
   href: events.md
 - name: Observers
   href: observers.md
-- name: Event Store Subscriptions
+- name: Subscriptions
   href: event-store-subscriptions.md
 - name: Failed Partitions
   href: failed-partitions.md

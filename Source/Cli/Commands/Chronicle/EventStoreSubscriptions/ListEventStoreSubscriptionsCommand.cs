@@ -10,7 +10,7 @@ namespace Cratis.Cli.Commands.Chronicle.EventStoreSubscriptions;
 /// </summary>
 [LlmDescription("Lists event store subscriptions configured for the target event store.")]
 [CliCommand("list", "List event store subscriptions", Branch = typeof(ChronicleBranch.EventStoreSubscriptions))]
-[CliExample("chronicle", "event-store-subscriptions", "list", "--event-store", "system")]
+[CliExample("chronicle", "subscriptions", "list", "--event-store", "system")]
 [LlmOutputAdvice("plain", "Use plain for consistency with other listing commands.")]
 public class ListEventStoreSubscriptionsCommand : ChronicleCommand<EventStoreSettings>
 {

@@ -31,7 +31,7 @@ Commands that operate within a specific event store or namespace accept the foll
 | `event-types` | List and inspect registered event type definitions. |
 | `events` | Query events from an event sequence or retrieve the tail sequence number. |
 | `observers` | List, inspect, replay, and retry observers. |
-| `event-store-subscriptions` | Manage cross-event-store subscriptions for event forwarding. |
+| `subscriptions` | Manage cross-event-store subscriptions for event forwarding. |
 | `failed-partitions` | List and inspect partitions where an observer has failed. |
 | `projections` | List and inspect projection definitions. |
 | `read-models` | List, query, and inspect read model instances and snapshots. |

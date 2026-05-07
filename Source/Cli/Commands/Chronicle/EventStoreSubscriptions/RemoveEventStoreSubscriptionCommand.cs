@@ -9,8 +9,8 @@ namespace Cratis.Cli.Commands.Chronicle.EventStoreSubscriptions;
 /// Removes an event store subscription.
 /// </summary>
 [LlmDescription("Removes an event store subscription from a target event store. Destructive — prompts for confirmation unless --yes is specified.")]
-[CliCommand("remove", "Remove an event store subscription", Branch = typeof(ChronicleBranch.EventStoreSubscriptions), DynamicCompletion = "event-store-subscriptions")]
-[CliExample("chronicle", "event-store-subscriptions", "remove", "orders-from-default")]
+[CliCommand("remove", "Remove an event store subscription", Branch = typeof(ChronicleBranch.EventStoreSubscriptions), DynamicCompletion = "subscriptions")]
+[CliExample("chronicle", "subscriptions", "remove", "orders-from-default")]
 [LlmOutputAdvice("plain", "Plain outputs a simple confirmation message.")]
 [LlmOption("<SUBSCRIPTION_ID>", "string", "The unique subscription identifier to remove (positional)")]
 public class RemoveEventStoreSubscriptionCommand : ChronicleCommand<RemoveEventStoreSubscriptionSettings>
