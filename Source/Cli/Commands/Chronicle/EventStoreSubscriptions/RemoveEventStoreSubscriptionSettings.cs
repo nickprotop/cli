@@ -12,6 +12,6 @@ public class RemoveEventStoreSubscriptionSettings : EventStoreSettings
     /// Gets or sets the subscription identifier.
     /// </summary>
     [CommandArgument(0, "<SUBSCRIPTION_ID>")]
-    [Description("Subscription identifier (from 'cratis chronicle event-store-subscriptions list')")]
+    [Description("Subscription identifier (from 'cratis chronicle subscriptions list')")]
     public string SubscriptionId { get; set; } = string.Empty;
 }

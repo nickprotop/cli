@@ -20,7 +20,7 @@ public class when_adding_and_removing_event_store_subscription(context context) 
             SubscriptionId = $"integration-test-subscription-{Guid.NewGuid():N}";
             AddResult = await RunCliAsync(
                 "chronicle",
-                "event-store-subscriptions",
+                "subscriptions",
                 "add",
                 SubscriptionId,
                 "system",
@@ -28,7 +28,7 @@ public class when_adding_and_removing_event_store_subscription(context context) 
                 "--event-store",
                 "system");
 
-            var listResult = await RunCliAsync("chronicle", "event-store-subscriptions", "list", "--event-store", "system");
+            var listResult = await RunCliAsync("chronicle", "subscriptions", "list", "--event-store", "system");
             var subscriptions = JsonDocument.Parse(listResult.StandardOutput).RootElement;
             var testSubscription = subscriptions.EnumerateArray()
                 .FirstOrDefault(subscription => subscription.GetProperty("identifier").GetString() == SubscriptionId);
@@ -36,7 +36,7 @@ public class when_adding_and_removing_event_store_subscription(context context) 
 
             if (SubscriptionAppearedInList)
             {
-                RemoveResult = await RunCliAsync("chronicle", "event-store-subscriptions", "remove", SubscriptionId, "--event-store", "system", "--yes");
+                RemoveResult = await RunCliAsync("chronicle", "subscriptions", "remove", SubscriptionId, "--event-store", "system", "--yes");
             }
         }
     }
