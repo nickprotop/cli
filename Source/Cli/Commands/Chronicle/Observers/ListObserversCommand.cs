@@ -14,6 +14,8 @@ namespace Cratis.Cli.Commands.Chronicle.Observers;
 [LlmOption("-t, --type", "string", "Filter by type: reactor, reducer, projection, or all. Invalid values return an error.")]
 public class ListObserversCommand : ChronicleCommand<ListObserversSettings>
 {
+    const int QuarantinedRunningStateValue = 5;
+
     /// <summary>
     /// Filters observers by type name, returning all observers when the type is "all".
     /// </summary>
@@ -51,6 +53,15 @@ public class ListObserversCommand : ChronicleCommand<ListObserversSettings>
         return false;
     }
 
+    /// <summary>
+    /// Determines whether an observer is quarantined.
+    /// </summary>
+    /// <param name="observer">The observer to inspect.</param>
+    /// <returns><see langword="true"/> if quarantined; otherwise <see langword="false"/>.</returns>
+    internal static bool IsQuarantined(ObserverInformation observer) =>
+        string.Equals(observer.RunningState.ToString(), "Quarantined", StringComparison.OrdinalIgnoreCase) ||
+        (int)observer.RunningState == QuarantinedRunningStateValue;
+
     /// <inheritdoc/>
     protected override async Task<int> ExecuteCommandAsync(IServices services, ListObserversSettings settings, string format)
     {
@@ -75,6 +86,7 @@ public class ListObserversCommand : ChronicleCommand<ListObserversSettings>
                 id = obs.Id,
                 type = obs.Type.ToString(),
                 runningState = obs.RunningState.ToString(),
+                isQuarantined = IsQuarantined(obs),
                 nextEventSequenceNumber = obs.NextEventSequenceNumber == ulong.MaxValue ? null : (ulong?)obs.NextEventSequenceNumber,
                 lastHandledEventSequenceNumber = obs.LastHandledEventSequenceNumber == ulong.MaxValue ? null : (ulong?)obs.LastHandledEventSequenceNumber,
                 isSubscribed = obs.IsSubscribed
@@ -86,12 +98,13 @@ public class ListObserversCommand : ChronicleCommand<ListObserversSettings>
             OutputFormatter.Write(
                 format,
                 filtered,
-                ["Id", "Type", "State", "Next#", "LastHandled#", "Subscribed"],
+                ["Id", "Type", "State", "Quarantined", "Next#", "LastHandled#", "Subscribed"],
                 obs =>
                 [
                     obs.Id,
                     obs.Type.ToString(),
                     obs.RunningState.ToString(),
+                    IsQuarantined(obs).ToString(),
                     obs.NextEventSequenceNumber == ulong.MaxValue ? "(never)" : obs.NextEventSequenceNumber.ToString(),
                     obs.LastHandledEventSequenceNumber == ulong.MaxValue ? "(never)" : obs.LastHandledEventSequenceNumber.ToString(),
                     obs.IsSubscribed.ToString()

@@ -4,7 +4,7 @@ Observers are the processing units that consume events from an event sequence an
 
 ## list
 
-Lists all observers registered in the specified event store and namespace, including their current state and sequence position.
+Lists all observers registered in the specified event store and namespace, including their current state, quarantine status, and sequence position.
 
 ```bash
 cratis chronicle observers list
@@ -188,6 +188,39 @@ Retry a failed partition:
 
 ```bash
 cratis chronicle observers retry-partition my-observer-id user-42
+```
+
+## clear-quarantine
+
+Clears quarantine for a quarantined observer so it can resume processing.
+
+```bash
+cratis chronicle observers clear-quarantine <OBSERVER_ID>
+```
+
+The command prompts for confirmation before proceeding.
+
+### Arguments
+
+| Argument | Description |
+|---|---|
+| `OBSERVER_ID` | The observer whose quarantine should be cleared. |
+
+### Options
+
+| Flag | Description |
+|---|---|
+| `-e, --event-store <NAME>` | Event store. Defaults to `default`. |
+| `-n, --namespace <NAME>` | Namespace. Defaults to `Default`. |
+| `--sequence <NAME>` | Event sequence. Defaults to `event-log`. |
+| `-y, --yes` | Skip confirmation prompt. |
+
+### Examples
+
+Clear quarantine for an observer:
+
+```bash
+cratis chronicle observers clear-quarantine my-observer-id
 ```
 
 ## Troubleshooting Workflow

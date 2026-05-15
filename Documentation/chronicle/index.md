@@ -30,7 +30,7 @@ Commands that operate within a specific event store or namespace accept the foll
 | `namespaces` | List namespaces within an event store. |
 | `event-types` | List and inspect registered event type definitions. |
 | `events` | Query events from an event sequence or retrieve the tail sequence number. |
-| `observers` | List, inspect, replay, and retry observers. |
+| `observers` | List, inspect, replay, retry, and clear quarantine for observers. |
 | `subscriptions` | Manage cross-event-store subscriptions for event forwarding. |
 | `failed-partitions` | List and inspect partitions where an observer has failed. |
 | `projections` | List and inspect projection definitions. |

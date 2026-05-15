@@ -189,6 +189,7 @@ Lists all observers registered in an event store/namespace.
 |--------|-------------|---------|
 | `-e, --event-store <NAME>` | Event store name | `default` |
 | `-n, --namespace <NAME>` | Namespace | `default` |
+| *(output field)* `isQuarantined` | Indicates whether the observer is quarantined | |
 
 #### `observers replay`
 
@@ -230,6 +231,21 @@ cratis observers retry-partition <OBSERVER_ID> <PARTITION> [options]
 Retries a failed partition of an observer without full replay.
 
 Same arguments and options as `replay-partition`.
+
+#### `observers clear-quarantine`
+
+```bash
+cratis observers clear-quarantine <OBSERVER_ID> [options]
+```
+
+Clears quarantine for a quarantined observer.
+
+| Argument / Option | Description | Default |
+|-------------------|-------------|---------|
+| `<OBSERVER_ID>` | The observer ID _(required)_ | |
+| `-e, --event-store <NAME>` | Event store name | `default` |
+| `-n, --namespace <NAME>` | Namespace | `default` |
+| `--sequence <ID>` | Event sequence ID | `event-log` |
 
 ---
 

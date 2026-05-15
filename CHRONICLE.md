@@ -30,7 +30,7 @@ cratis context set dev
 | `namespaces` | list |
 | `event-types` | list, show |
 | `events` | get, count (tail), has |
-| `observers` | list, show, replay, replay-partition, retry-partition |
+| `observers` | list, show, replay, replay-partition, retry-partition, clear-quarantine |
 | `failed-partitions` | list, show |
 | `recommendations` | list, perform, ignore |
 | `identities` | list |
