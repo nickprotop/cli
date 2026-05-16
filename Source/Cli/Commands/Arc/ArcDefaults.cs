@@ -11,7 +11,7 @@ public static class ArcDefaults
     /// <summary>
     /// The default URL for an Arc application.
     /// </summary>
-    public const string DefaultUrl = "https://localhost:5001";
+    public const string DefaultUrl = "http://localhost:5000";
 
     /// <summary>
     /// Environment variable name for the Arc application URL.

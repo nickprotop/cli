@@ -12,7 +12,7 @@ cratis arc commands list [--url <URL>] [-o <FORMAT>]
 
 | Option | Description |
 |---|---|
-| `--url <URL>` | Base URL of the Arc application (default: `https://localhost:5001`). |
+| `--url <URL>` | Base URL of the Arc application (default: `http://localhost:5000`). |
 | `-o, --output <FORMAT>` | Output format: `table`, `plain`, `json`, `json-compact`. |
 
 ## Output

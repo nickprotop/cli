@@ -9,7 +9,7 @@ namespace Cratis.Cli.Commands.Arc.Commands;
 [LlmDescription("Lists all registered command endpoints in the Arc application. Returns name, namespace, HTTP route, type, and documentation summary for each command.")]
 [CliCommand("list", "List registered command endpoints", Branch = typeof(ArcBranch.Commands))]
 [CliExample("arc", "commands", "list")]
-[CliExample("arc", "commands", "list", "--url", "https://localhost:5001")]
+[CliExample("arc", "commands", "list", "--url", "http://localhost:5000")]
 [CliExample("arc", "commands", "list", "-o", "json")]
 [LlmOutputAdvice("plain", "plain is significantly smaller than JSON for large command lists.")]
 public class ListCommandsCommand : ArcCommand<ArcSettings>
