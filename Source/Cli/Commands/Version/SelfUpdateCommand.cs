@@ -8,7 +8,7 @@ namespace Cratis.Cli.Commands.Version;
 /// <summary>
 /// Updates the Cratis CLI to the latest version using the detected installation method.
 /// </summary>
-[LlmDescription("Updates the cratis CLI to the latest version using the appropriate installation method (dotnet tool or Homebrew).")]
+[LlmDescription("Updates the cratis CLI to the latest version using the appropriate installation method (dotnet tool, Homebrew, Winget, or Chocolatey).")]
 [CliCommand("update", "Update the Cratis CLI to the latest version")]
 [CliExample("update")]
 [CliExample("update", "--version", "1.2.3")]
@@ -103,6 +103,8 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
                 {
                     CliUpdateStrategy.DotNetTool => "Ensure the .NET SDK is installed and 'dotnet' is on your PATH",
                     CliUpdateStrategy.Homebrew => "Ensure Homebrew is installed and 'brew' is on your PATH",
+                    CliUpdateStrategy.Winget => "Ensure winget is installed and 'winget' is on your PATH",
+                    CliUpdateStrategy.Chocolatey => "Ensure Chocolatey is installed and 'choco' is on your PATH",
                     _ => null
                 };
                 OutputFormatter.WriteError(format, "Failed to start update process", hint, ExitCodes.ServerErrorCode);

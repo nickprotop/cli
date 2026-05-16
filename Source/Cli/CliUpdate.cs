@@ -21,6 +21,16 @@ public enum CliUpdateStrategy
     Homebrew,
 
     /// <summary>
+    /// Update by running <c>winget upgrade --id Cratis.Cli</c>.
+    /// </summary>
+    Winget,
+
+    /// <summary>
+    /// Update by running <c>choco upgrade cratis</c>.
+    /// </summary>
+    Chocolatey,
+
+    /// <summary>
     /// Update manually by downloading and replacing the Linux native binary.
     /// </summary>
     ManualLinux,
@@ -129,6 +139,44 @@ public static class CliUpdate
             };
         }
 
+        if (strategy == CliUpdateStrategy.Winget)
+        {
+            var arguments = "upgrade --id Cratis.Cli";
+            if (!string.IsNullOrWhiteSpace(targetVersion))
+            {
+                arguments += $" --version {targetVersion}";
+            }
+
+            return new ProcessStartInfo
+            {
+                FileName = "winget",
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+
+        if (strategy == CliUpdateStrategy.Chocolatey)
+        {
+            var arguments = "upgrade cratis --yes";
+            if (!string.IsNullOrWhiteSpace(targetVersion))
+            {
+                arguments += $" --version {targetVersion}";
+            }
+
+            return new ProcessStartInfo
+            {
+                FileName = "choco",
+                Arguments = arguments,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+
         return null;
     }
 
@@ -190,6 +238,16 @@ public static class CliUpdate
             return CliUpdateStrategy.Homebrew;
         }
 
+        if (IsWingetPath(processPath))
+        {
+            return CliUpdateStrategy.Winget;
+        }
+
+        if (IsChocolateyPath(processPath))
+        {
+            return CliUpdateStrategy.Chocolatey;
+        }
+
         if (isLinux)
         {
             return CliUpdateStrategy.ManualLinux;
@@ -207,6 +265,15 @@ public static class CliUpdate
         !string.IsNullOrWhiteSpace(path) &&
         (path.Contains("/Cellar/cratis/", StringComparison.OrdinalIgnoreCase) ||
          path.Contains("/Homebrew/Cellar/cratis/", StringComparison.OrdinalIgnoreCase));
+
+    static bool IsWingetPath(string? path) =>
+        !string.IsNullOrWhiteSpace(path) &&
+        path.Contains(@"\WinGet\Packages\", StringComparison.OrdinalIgnoreCase);
+
+    static bool IsChocolateyPath(string? path) =>
+        !string.IsNullOrWhiteSpace(path) &&
+        (path.Contains(@"\chocolatey\bin\", StringComparison.OrdinalIgnoreCase) ||
+         path.Contains(@"\chocolatey\lib\", StringComparison.OrdinalIgnoreCase));
 
     static string? GetEffectiveProcessPath()
     {

@@ -15,6 +15,30 @@ To upgrade:
 brew upgrade cratis
 ```
 
+### Windows (Winget)
+
+```powershell
+winget install Cratis.Cli
+```
+
+To upgrade:
+
+```powershell
+winget upgrade Cratis.Cli
+```
+
+### Windows (Chocolatey)
+
+```powershell
+choco install cratis
+```
+
+To upgrade:
+
+```powershell
+choco upgrade cratis
+```
+
 ### Linux
 
 Download and install the pre-built native binary from the [latest release](https://github.com/Cratis/cli/releases/latest):
