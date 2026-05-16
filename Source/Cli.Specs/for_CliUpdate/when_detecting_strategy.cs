@@ -51,4 +51,20 @@ public class when_detecting_strategy : Specification
         hint.ShouldContain("run 'cratis update'");
         hint.ShouldContain("1.0.0 -> 1.1.0");
     }
+
+    [Fact]
+    void should_prepare_brew_update_before_upgrade_for_homebrew()
+    {
+        var startInfo = CliUpdate.CreatePreUpdateProcessStartInfo(CliUpdateStrategy.Homebrew);
+        startInfo.ShouldNotBeNull();
+        startInfo!.FileName.ShouldEqual("brew");
+        startInfo.Arguments.ShouldEqual("update");
+    }
+
+    [Fact]
+    void should_not_prepare_brew_update_when_target_version_is_set()
+    {
+        var startInfo = CliUpdate.CreatePreUpdateProcessStartInfo(CliUpdateStrategy.Homebrew, "1.2.3");
+        startInfo.ShouldBeNull();
+    }
 }

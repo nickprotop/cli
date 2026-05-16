@@ -61,6 +61,30 @@ public static class CliUpdate
     }
 
     /// <summary>
+    /// Creates process launch settings that should run before the main update command.
+    /// </summary>
+    /// <param name="strategy">The detected update strategy.</param>
+    /// <param name="targetVersion">Optional target version.</param>
+    /// <returns>A process start info for supported auto-update paths, otherwise null.</returns>
+    public static ProcessStartInfo? CreatePreUpdateProcessStartInfo(CliUpdateStrategy strategy, string? targetVersion = null)
+    {
+        if (strategy != CliUpdateStrategy.Homebrew || !string.IsNullOrWhiteSpace(targetVersion))
+        {
+            return null;
+        }
+
+        return new ProcessStartInfo
+        {
+            FileName = "brew",
+            Arguments = "update",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+    }
+
+    /// <summary>
     /// Creates the process launch settings for automatic update, when available.
     /// </summary>
     /// <param name="strategy">The detected update strategy.</param>

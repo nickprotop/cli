@@ -28,6 +28,16 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
             AnsiConsole.MarkupLine($"[bold]Updating Cratis CLI...[/] (current: {currentVersion.EscapeMarkup()})");
         }
 
+        var preUpdateStartInfo = CliUpdate.CreatePreUpdateProcessStartInfo(strategy, settings.TargetVersion);
+        if (preUpdateStartInfo is not null)
+        {
+            var preUpdateResult = await RunProcess(preUpdateStartInfo);
+            if (preUpdateResult is not null)
+            {
+                return preUpdateResult.Value;
+            }
+        }
+
         var startInfo = CliUpdate.CreateUpdateProcessStartInfo(strategy, settings.TargetVersion);
         if (startInfo is null)
         {
@@ -56,28 +66,10 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
             return ExitCodes.Success;
         }
 
-        using var process = Process.Start(startInfo);
-        if (process is null)
+        var updateResult = await RunProcess(startInfo);
+        if (updateResult is not null)
         {
-            var hint = strategy switch
-            {
-                CliUpdateStrategy.DotNetTool => "Ensure the .NET SDK is installed and 'dotnet' is on your PATH",
-                CliUpdateStrategy.Homebrew => "Ensure Homebrew is installed and 'brew' is on your PATH",
-                _ => null
-            };
-            OutputFormatter.WriteError(format, "Failed to start update process", hint, ExitCodes.ServerErrorCode);
-            return ExitCodes.ServerError;
-        }
-
-        var stdout = await process.StandardOutput.ReadToEndAsync();
-        var stderr = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-
-        if (process.ExitCode != 0)
-        {
-            var errorMessage = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
-            OutputFormatter.WriteError(format, $"Update failed: {errorMessage}", errorCode: ExitCodes.ServerErrorCode);
-            return ExitCodes.ServerError;
+            return updateResult.Value;
         }
 
         var newVersion = VersionCommand.GetCliVersion();
@@ -101,6 +93,35 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
         }
 
         return ExitCodes.Success;
+
+        async Task<int?> RunProcess(ProcessStartInfo processStartInfo)
+        {
+            using var process = Process.Start(processStartInfo);
+            if (process is null)
+            {
+                var hint = strategy switch
+                {
+                    CliUpdateStrategy.DotNetTool => "Ensure the .NET SDK is installed and 'dotnet' is on your PATH",
+                    CliUpdateStrategy.Homebrew => "Ensure Homebrew is installed and 'brew' is on your PATH",
+                    _ => null
+                };
+                OutputFormatter.WriteError(format, "Failed to start update process", hint, ExitCodes.ServerErrorCode);
+                return ExitCodes.ServerError;
+            }
+
+            var stdout = await process.StandardOutput.ReadToEndAsync();
+            var stderr = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                var errorMessage = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
+                OutputFormatter.WriteError(format, $"Update failed: {errorMessage}", errorCode: ExitCodes.ServerErrorCode);
+                return ExitCodes.ServerError;
+            }
+
+            return null;
+        }
     }
 
     static string ResolveFormat(string output)
