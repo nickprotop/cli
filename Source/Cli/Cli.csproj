@@ -14,6 +14,10 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
+    <PropertyGroup Condition="'$(SelfContained)' == 'true'">
+        <DefineConstants>$(DefineConstants);CRATIS_NATIVE</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
         <PackageReference Include="Cratis.Chronicle.Connections" />
         <PackageReference Include="Cratis.Chronicle.Contracts" />

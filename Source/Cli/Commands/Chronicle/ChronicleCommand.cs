@@ -4,7 +4,6 @@
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
-using Cratis.Cli.Commands.Version;
 using Grpc.Core;
 
 namespace Cratis.Cli.Commands.Chronicle;
@@ -28,11 +27,6 @@ public abstract partial class ChronicleCommand<TSettings> : AsyncCommand<TSettin
         {
             WriteDebugInfo(settings);
         }
-
-        // Start update check in the background — never blocks the command.
-        using var updateCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        updateCts.CancelAfter(TimeSpan.FromSeconds(5));
-        var updateCheckTask = UpdateChecker.CheckForUpdate(VersionCommand.GetCliVersion(), updateCts.Token);
 
         var tokenRefreshAttempted = false;
         while (true)
@@ -65,7 +59,6 @@ public abstract partial class ChronicleCommand<TSettings> : AsyncCommand<TSettin
                     await Console.Error.WriteLineAsync($"[debug] command completed in {sw.ElapsedMilliseconds}ms, exit code {exitCode}");
                 }
 
-                await ShowUpdateHint(updateCheckTask, format);
                 return exitCode;
             }
             catch (RpcException ex) when (!tokenRefreshAttempted && IsHttpUnauthorized(ex))
@@ -178,32 +171,5 @@ public abstract partial class ChronicleCommand<TSettings> : AsyncCommand<TSettin
         }
 
         return false;
-    }
-
-    static async Task ShowUpdateHint(Task<string?> updateCheckTask, string format)
-    {
-        try
-        {
-            if (!updateCheckTask.IsCompleted)
-            {
-                return;
-            }
-
-            var latestVersion = await updateCheckTask;
-            if (latestVersion is null)
-            {
-                return;
-            }
-
-            if (string.Equals(format, OutputFormats.Table, StringComparison.Ordinal))
-            {
-                AnsiConsole.WriteLine();
-                AnsiConsole.MarkupLine($"  [{OutputFormatter.Warning.ToMarkup()}]\u2191 Update available:[/] {latestVersion.EscapeMarkup()} \u2014 run [bold]cratis update[/] to upgrade");
-            }
-        }
-        catch
-        {
-            // Update check failures are non-critical.
-        }
     }
 }

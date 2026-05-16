@@ -6,9 +6,9 @@ using System.Diagnostics;
 namespace Cratis.Cli.Commands.Version;
 
 /// <summary>
-/// Updates the Cratis CLI to the latest (or a specific) version using dotnet tool update.
+/// Updates the Cratis CLI to the latest version using the detected installation method.
 /// </summary>
-[LlmDescription("Updates the cratis CLI to the latest version from NuGet. Use instead of remembering the NuGet package name.")]
+[LlmDescription("Updates the cratis CLI to the latest version using the appropriate installation method (dotnet tool or Homebrew).")]
 [CliCommand("update", "Update the Cratis CLI to the latest version")]
 [CliExample("update")]
 [CliExample("update", "--version", "1.2.3")]
@@ -16,51 +16,60 @@ namespace Cratis.Cli.Commands.Version;
 [LlmOption("--version", "string", "Specific version to install (default: latest)")]
 public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
 {
-    const string PackageId = "Cratis.Cli";
-
     /// <inheritdoc/>
     protected override async Task<int> ExecuteAsync(CommandContext context, SelfUpdateSettings settings, CancellationToken cancellationToken)
     {
         var format = ResolveFormat(settings.Output);
         var currentVersion = VersionCommand.GetCliVersion();
-
-        var arguments = $"tool update -g {PackageId}";
-        if (!string.IsNullOrWhiteSpace(settings.TargetVersion))
-        {
-            arguments += $" --version {settings.TargetVersion}";
-        }
+        var strategy = CliUpdate.DetectStrategy();
 
         if (string.Equals(format, OutputFormats.Table, StringComparison.Ordinal))
         {
             AnsiConsole.MarkupLine($"[bold]Updating Cratis CLI...[/] (current: {currentVersion.EscapeMarkup()})");
         }
 
-        var startInfo = new ProcessStartInfo
+        var preUpdateStartInfo = CliUpdate.CreatePreUpdateProcessStartInfo(strategy, settings.TargetVersion);
+        if (preUpdateStartInfo is not null)
         {
-            FileName = "dotnet",
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        using var process = Process.Start(startInfo);
-        if (process is null)
-        {
-            OutputFormatter.WriteError(format, "Failed to start dotnet process", "Ensure the .NET SDK is installed and 'dotnet' is on your PATH", ExitCodes.ServerErrorCode);
-            return ExitCodes.ServerError;
+            var preUpdateResult = await RunProcess(preUpdateStartInfo);
+            if (preUpdateResult is not null)
+            {
+                return preUpdateResult.Value;
+            }
         }
 
-        var stdout = await process.StandardOutput.ReadToEndAsync();
-        var stderr = await process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
-
-        if (process.ExitCode != 0)
+        var startInfo = CliUpdate.CreateUpdateProcessStartInfo(strategy, settings.TargetVersion);
+        if (startInfo is null)
         {
-            var errorMessage = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
-            OutputFormatter.WriteError(format, $"Update failed: {errorMessage}", errorCode: ExitCodes.ServerErrorCode);
-            return ExitCodes.ServerError;
+            if (!string.IsNullOrWhiteSpace(settings.TargetVersion) && strategy == CliUpdateStrategy.Homebrew)
+            {
+                OutputFormatter.WriteError(format, "Target version is not supported for Homebrew updates", "Run 'cratis update' to upgrade to the latest Homebrew version", ExitCodes.ValidationErrorCode);
+                return ExitCodes.ValidationError;
+            }
+
+            var instructions = CliUpdate.GetManualUpdateInstructions(strategy) ?? "Manual update required.";
+            if (string.Equals(format, OutputFormats.Json, StringComparison.Ordinal) || string.Equals(format, OutputFormats.JsonCompact, StringComparison.Ordinal))
+            {
+                OutputFormatter.WriteObject(format, new
+                {
+                    PreviousVersion = currentVersion,
+                    CurrentVersion = currentVersion,
+                    Updated = false,
+                    Strategy = strategy.ToString(),
+                    Message = instructions
+                });
+            }
+            else
+            {
+                AnsiConsole.MarkupLine($"[yellow]{instructions.EscapeMarkup()}[/]");
+            }
+            return ExitCodes.Success;
+        }
+
+        var updateResult = await RunProcess(startInfo);
+        if (updateResult is not null)
+        {
+            return updateResult.Value;
         }
 
         var newVersion = VersionCommand.GetCliVersion();
@@ -84,6 +93,35 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
         }
 
         return ExitCodes.Success;
+
+        async Task<int?> RunProcess(ProcessStartInfo processStartInfo)
+        {
+            using var process = Process.Start(processStartInfo);
+            if (process is null)
+            {
+                var hint = strategy switch
+                {
+                    CliUpdateStrategy.DotNetTool => "Ensure the .NET SDK is installed and 'dotnet' is on your PATH",
+                    CliUpdateStrategy.Homebrew => "Ensure Homebrew is installed and 'brew' is on your PATH",
+                    _ => null
+                };
+                OutputFormatter.WriteError(format, "Failed to start update process", hint, ExitCodes.ServerErrorCode);
+                return ExitCodes.ServerError;
+            }
+
+            var stdout = await process.StandardOutput.ReadToEndAsync();
+            var stderr = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                var errorMessage = !string.IsNullOrWhiteSpace(stderr) ? stderr.Trim() : stdout.Trim();
+                OutputFormatter.WriteError(format, $"Update failed: {errorMessage}", errorCode: ExitCodes.ServerErrorCode);
+                return ExitCodes.ServerError;
+            }
+
+            return null;
+        }
     }
 
     static string ResolveFormat(string output)

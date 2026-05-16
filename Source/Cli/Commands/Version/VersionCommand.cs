@@ -113,7 +113,7 @@ public class VersionCommand : AsyncCommand<ChronicleSettings>
 
         if (latestCli is not null)
         {
-            AnsiConsole.MarkupLine($"[yellow]Update available:[/] {latestCli.EscapeMarkup()} (run 'cratis update' to upgrade)");
+            AnsiConsole.MarkupLine($"[yellow]Update available:[/] {cliVersion.EscapeMarkup()} -> {latestCli.EscapeMarkup()} (run 'cratis update' to upgrade)");
         }
 
         if (serverInfo is not null)
