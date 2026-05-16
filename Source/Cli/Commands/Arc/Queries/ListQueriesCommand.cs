@@ -9,7 +9,7 @@ namespace Cratis.Cli.Commands.Arc.Queries;
 [LlmDescription("Lists all registered query endpoints in the Arc application. Returns name, namespace, HTTP route, fully qualified type, and documentation summary for each query.")]
 [CliCommand("list", "List registered query endpoints", Branch = typeof(ArcBranch.Queries))]
 [CliExample("arc", "queries", "list")]
-[CliExample("arc", "queries", "list", "--url", "https://localhost:5001")]
+[CliExample("arc", "queries", "list", "--url", "http://localhost:5000")]
 [CliExample("arc", "queries", "list", "-o", "json")]
 [LlmOutputAdvice("plain", "plain is significantly smaller than JSON for large query lists.")]
 public class ListQueriesCommand : ArcCommand<ArcSettings>

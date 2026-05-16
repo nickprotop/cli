@@ -8,7 +8,7 @@ All `cratis arc` commands accept the following connection flag:
 
 | Flag | Description |
 |---|---|
-| `--url <URL>` | Base URL of the Arc application. Overrides the `ARC_URL` environment variable. Defaults to `https://localhost:5001`. |
+| `--url <URL>` | Base URL of the Arc application. Overrides the `ARC_URL` environment variable. Defaults to `http://localhost:5000`. |
 
 ## Connection Resolution Order
 
@@ -16,7 +16,8 @@ The CLI resolves the Arc application URL in this order:
 
 1. `--url` flag
 2. `ARC_URL` environment variable
-3. Default: `https://localhost:5001`
+3. `Properties/launchSettings.json` or `properties/launchSettings.json` `applicationUrl`
+4. Default: `http://localhost:5000`
 
 ## Sub-Commands
 
