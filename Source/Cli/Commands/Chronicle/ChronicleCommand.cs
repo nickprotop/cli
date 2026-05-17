@@ -15,6 +15,12 @@ namespace Cratis.Cli.Commands.Chronicle;
 public abstract partial class ChronicleCommand<TSettings> : AsyncCommand<TSettings>
     where TSettings : ChronicleSettings
 {
+    /// <summary>
+    /// Gets a value indicating whether this command wraps execution in an <see cref="AnsiConsole.Status"/> spinner.
+    /// Override and return <see langword="false"/> for commands that manage their own interactive display (e.g. live dashboards).
+    /// </summary>
+    protected virtual bool UseStatusSpinner => true;
+
     [GeneratedRegex("://(?<user>[^:@/]+):[^@/]+@", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
     static partial Regex ConnectionStringCredentialsRegex { get; }
 
@@ -40,7 +46,7 @@ public abstract partial class ChronicleCommand<TSettings> : AsyncCommand<TSettin
                 int exitCode;
                 var sw = settings.Debug ? Stopwatch.StartNew() : null;
 
-                if (string.Equals(format, OutputFormats.Table, StringComparison.Ordinal))
+                if (string.Equals(format, OutputFormats.Table, StringComparison.Ordinal) && UseStatusSpinner)
                 {
                     exitCode = await AnsiConsole.Status()
                         .Spinner(Spinner.Known.Dots)
