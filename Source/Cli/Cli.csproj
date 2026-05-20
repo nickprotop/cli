@@ -24,6 +24,7 @@
         <PackageReference Include="Cratis.Fundamentals" />
         <PackageReference Include="Spectre.Console" />
         <PackageReference Include="Spectre.Console.Cli" />
+        <PackageReference Include="SharpConsoleUI" />
         <PackageReference Include="Grpc.Net.Client" />
     </ItemGroup>
 
