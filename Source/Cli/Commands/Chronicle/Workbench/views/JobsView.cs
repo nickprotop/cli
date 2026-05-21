@@ -2,21 +2,17 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using Cratis.Chronicle.Contracts.Jobs;
-using SharpConsoleUI;
-using SharpConsoleUI.Builders;
-using SharpConsoleUI.Controls;
-using UITableRow = SharpConsoleUI.Controls.TableRow;
+using SharpConsoleUI.Layout;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
 /// <summary>
-/// Jobs tab — table of background jobs with stop/resume actions in the bordered detail pane.
+/// Jobs tab — filterable table of background jobs with stop/resume actions in the detail pane.
 /// </summary>
-public class JobsView : IWorkbenchView
+public class JobsView : FilterableTableView<Job>
 {
-    TableControl? _table;
-    PanelControl? _detailPanel;
-    WorkbenchData? _pendingData;
+    /// <summary>Gets the currently selected job, or <see langword="null"/> if none is selected.</summary>
+    public Job? SelectedJob => SelectedItem;
 
     /// <summary>
     /// Gets or sets the callback invoked when the user requests to stop a job.
@@ -39,86 +35,123 @@ public class JobsView : IWorkbenchView
     public Action<IReadOnlyList<Job>>? OnResumeAll { get; set; }
 
     /// <summary>
-    /// Returns all jobs that are currently checked (checkbox mode).
+    /// Gets all jobs that are currently checked (checkbox mode).
     /// </summary>
-    /// <returns>A list of checked <see cref="Job"/> items.</returns>
-    public IReadOnlyList<Job> GetCheckedItems() =>
-        [.. (_table?.GetCheckedRows() ?? []).Select(r => r.Tag).OfType<Job>()];
+    public IReadOnlyList<Job> Checked => CheckedItems;
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        _table?.Dispose();
-        _detailPanel?.Dispose();
-    }
+    protected override IReadOnlyList<(string Name, TextJustification Justify, int? Width)> Columns =>
+    [
+        ("Status", TextJustification.Left, 22),
+        ("Type", TextJustification.Left, null),
+        ("Progress", TextJustification.Right, 14)
+    ];
 
     /// <inheritdoc/>
-    public IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
-    {
-        _table = Controls.Table()
-            .AddColumn("Status", SharpConsoleUI.Layout.TextJustification.Left, 22)
-            .AddColumn("Type", SharpConsoleUI.Layout.TextJustification.Left, null)
-            .AddColumn("Progress", SharpConsoleUI.Layout.TextJustification.Right, 14)
-            .Interactive()
-            .WithCheckboxMode()
-            .WithFiltering()
-            .WithSorting()
-            .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .OnSelectedRowChanged((_, _) => RefreshDetail())
-            .WithName("JobsTable")
-            .Build();
-
-        _detailPanel = Controls.Panel()
-            .WithContent($"[{WorkbenchColors.Muted.ToMarkup()}]Select a job.[/]")
-            .WithHeader(" JOB ")
-            .Rounded()
-            .WithBorderColor(WorkbenchColors.Accent)
-            .WithPadding(1, 0, 1, 0)
-            .FillVertical()
-            .WithName("JobDetailPanel")
-            .Build();
-
-        var root = HorizontalGridControl.Create()
-            .Column(c => c.Add(_table))
-            .WithSplitterAfter(0)
-            .Column(c => c.Width(45).Add(_detailPanel))
-            .Build();
-
-        // Apply any data that arrived before controls were ready (NavigationView lazy init).
-        if (_pendingData is not null)
-            UpdateData(_pendingData);
-
-        return root;
-    }
+    protected override string DetailPanelHeader => "JOB";
 
     /// <inheritdoc/>
-    public void UpdateData(WorkbenchData data)
+    protected override bool HasCheckboxMode => true;
+
+    /// <inheritdoc/>
+    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(Job item)
     {
-        _pendingData = data;
-        if (_table is null) return;
-
-        var selectedKey = (_table.SelectedRow?.Tag as Job)?.Id.ToString();
-
-        _table.ClearRows();
-        foreach (var job in data.Jobs.OrderBy(j => j.Status.ToString()))
+        if (OnStopJob is not null)
         {
-            var statusColor = GetJobStatusColor(job.Status);
-            _table.AddRow(new UITableRow(
-            [
-                $"[{statusColor}]{job.Status}[/]",
-                job.Type ?? job.Id.ToString(),
-                FormatProgress(job.Progress)
-            ])
-            { Tag = job });
+            yield return ("Stop job", "S", () => OnStopJob(item));
         }
 
-        if (selectedKey is not null)
+        if (OnResumeJob is not null)
         {
-            RestoreSelection(selectedKey);
+            yield return ("Resume job", "U", () => OnResumeJob(item));
         }
 
-        RefreshDetail();
+        var checkedCount = Checked.Count;
+        if (OnStopAll is not null && checkedCount > 1)
+        {
+            yield return ($"Stop {checkedCount} checked", null, () => OnStopAll(Checked));
+        }
+
+        if (OnResumeAll is not null && checkedCount > 1)
+        {
+            yield return ($"Resume {checkedCount} checked", null, () => OnResumeAll(Checked));
+        }
     }
+
+    /// <inheritdoc/>
+    protected override IEnumerable<Job> GetItems(WorkbenchData data) =>
+        data.Jobs.OrderBy(j => j.Status.ToString());
+
+    /// <inheritdoc/>
+    protected override string GetKey(Job item) => item.Id.ToString();
+
+    /// <inheritdoc/>
+    protected override string[] BuildRow(Job item)
+    {
+        var statusColor = GetJobStatusColor(item.Status);
+        return
+        [
+            $"[{statusColor}]{item.Status}[/]",
+            item.Type ?? item.Id.ToString(),
+            FormatProgress(item.Progress)
+        ];
+    }
+
+    /// <inheritdoc/>
+    protected override string RenderDetail(Job? item, WorkbenchData? data)
+    {
+        if (item is null)
+        {
+            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a job.[/]";
+        }
+
+        var mut = WorkbenchColors.Muted.ToMarkup();
+        var statusColor = GetJobStatusColor(item.Status);
+
+        var lines = new List<string>
+        {
+            $"[{mut}]Id[/]       {item.Id}",
+            $"[{mut}]Type[/]     {item.Type ?? "—"}",
+            $"[{mut}]Status[/]   [{statusColor}]{item.Status}[/]",
+            $"[{mut}]Progress[/] {FormatProgress(item.Progress)}"
+        };
+
+        if (item.Progress is not null)
+        {
+            lines.Add($"[{mut}]Steps[/]    {item.Progress.SuccessfulSteps}/{item.Progress.TotalSteps}");
+            if (item.Progress.FailedSteps > 0)
+            {
+                lines.Add($"[{WorkbenchColors.Danger.ToMarkup()}]Failed[/]   {item.Progress.FailedSteps}");
+            }
+
+            if (!string.IsNullOrEmpty(item.Progress.Message))
+            {
+                lines.Add($"[{mut}]Message[/]  {item.Progress.Message}");
+            }
+        }
+
+        if (OnStopJob is not null || OnResumeJob is not null)
+        {
+            lines.Add(string.Empty);
+            if (OnStopJob is not null)
+            {
+                lines.Add($"[{mut}]Press[/] [bold]S[/] [{mut}]to stop[/]");
+            }
+
+            if (OnResumeJob is not null)
+            {
+                lines.Add($"[{mut}]Press[/] [bold]U[/] [{mut}]to resume[/]");
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    /// <inheritdoc/>
+    protected override bool MatchesFilter(Job item, string filter) =>
+        (item.Type ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        item.Id.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        item.Status.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase);
 
     static string GetJobStatusColor(JobStatus status) => status switch
     {
@@ -131,66 +164,11 @@ public class JobsView : IWorkbenchView
 
     static string FormatProgress(JobProgress? p)
     {
-        if (p is null || p.TotalSteps == 0) return "—";
+        if (p is null || p.TotalSteps == 0)
+        {
+            return "—";
+        }
+
         return $"{p.SuccessfulSteps}/{p.TotalSteps}";
-    }
-
-    void RestoreSelection(string key)
-    {
-        if (_table is null) return;
-
-        for (var i = 0; i < _table.Rows.Count; i++)
-        {
-            if (_table.Rows[i].Tag is Job job && job.Id.ToString() == key)
-            {
-                _table.SelectedRowIndex = i;
-                return;
-            }
-        }
-    }
-
-    void RefreshDetail()
-    {
-        if (_table is null || _detailPanel is null) return;
-
-        if (_table.SelectedRow?.Tag is not Job job)
-        {
-            _detailPanel.Content = $"[{WorkbenchColors.Muted.ToMarkup()}]Select a job.[/]";
-            return;
-        }
-
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var statusColor = GetJobStatusColor(job.Status);
-
-        var lines = new List<string>
-        {
-            $"[{mut}]Id[/]       {job.Id}",
-            $"[{mut}]Type[/]     {job.Type ?? "—"}",
-            $"[{mut}]Status[/]   [{statusColor}]{job.Status}[/]",
-            $"[{mut}]Progress[/] {FormatProgress(job.Progress)}"
-        };
-
-        if (job.Progress is not null)
-        {
-            lines.Add($"[{mut}]Steps[/]    {job.Progress.SuccessfulSteps}/{job.Progress.TotalSteps}");
-            if (job.Progress.FailedSteps > 0)
-            {
-                lines.Add($"[{WorkbenchColors.Danger.ToMarkup()}]Failed[/]   {job.Progress.FailedSteps}");
-            }
-
-            if (!string.IsNullOrEmpty(job.Progress.Message))
-            {
-                lines.Add($"[{mut}]Message[/]  {job.Progress.Message}");
-            }
-        }
-
-        if (OnStopJob is not null || OnResumeJob is not null)
-        {
-            lines.Add(string.Empty);
-            if (OnStopJob is not null) lines.Add($"[{mut}]Press[/] [bold]S[/] [{mut}]to stop[/]");
-            if (OnResumeJob is not null) lines.Add($"[{mut}]Press[/] [bold]U[/] [{mut}]to resume[/]");
-        }
-
-        _detailPanel.Content = string.Join('\n', lines);
     }
 }

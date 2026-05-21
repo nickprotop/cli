@@ -24,6 +24,39 @@ public interface IWorkbenchView : IDisposable
     }
 
     /// <summary>
+    /// Gets the primary focus target for this view (filter prompt or table).
+    /// Returns <see langword="null"/> for views that do not support keyboard focus routing.
+    /// </summary>
+    IWindowControl? PrimaryFocusTarget => null;
+
+    /// <summary>
+    /// Gets or sets whether this view is currently visible to the user.
+    /// When <see langword="true"/>, background data refreshes update the internal cache but do not
+    /// rebuild the table — preserving the user's sort order, selection, and scroll position.
+    /// </summary>
+    bool IsActive { get; set; }
+
+    /// <summary>
+    /// Gets the current content of the detail panel, or <see langword="null"/> if no detail is shown.
+    /// Returns <see langword="null"/> for views that do not have a detail panel.
+    /// </summary>
+    string? DetailContent => null;
+
+    /// <summary>
+    /// Gets the per-view help text shown in the help overlay — a brief description plus key shortcuts.
+    /// Returns an empty string when the view provides no extra help.
+    /// </summary>
+    string ViewHelp => string.Empty;
+
+    /// <summary>
+    /// Toggles the detail pane open or closed with an animation.
+    /// Views without a detail pane may leave this as a no-op.
+    /// </summary>
+    void ToggleDetailPane()
+    {
+    }
+
+    /// <summary>
     /// Builds the initial control hierarchy for this view. Called once during window construction.
     /// </summary>
     /// <param name="windowSystem">The SharpConsoleUI window system.</param>
@@ -50,6 +83,20 @@ public interface IWorkbenchView : IDisposable
     /// Clears the current filter and returns focus to the table. No-op for views without a filter.
     /// </summary>
     void ClearFilter()
+    {
+    }
+
+    /// <summary>
+    /// Advances to the next page of results. No-op for views without pagination.
+    /// </summary>
+    void NextPage()
+    {
+    }
+
+    /// <summary>
+    /// Goes back to the previous page of results. No-op for views without pagination.
+    /// </summary>
+    void PreviousPage()
     {
     }
 }

@@ -8,9 +8,7 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// </summary>
 public enum WorkbenchView
 {
-    // Primary views — cycled with ← → and accessed with keys 1–8.
-
-    /// <summary>Overview showing server health, observer counts, and any failures.</summary>
+    /// <summary>Overview showing server health, observer counts, context, and any failures.</summary>
     Overview = 0,
 
     /// <summary>Full list of all observers with their running states and sequence lag.</summary>
@@ -25,8 +23,8 @@ public enum WorkbenchView
     /// <summary>Pending recommendations from the Chronicle server, with apply and ignore actions.</summary>
     Recommendations = 4,
 
-    /// <summary>The live event log — last 50 events, newest first.</summary>
-    EventLog = 5,
+    /// <summary>The event sequences view — recent events from the event log, newest first.</summary>
+    EventSequences = 5,
 
     /// <summary>All registered event types with their JSON schemas.</summary>
     EventTypes = 6,
@@ -43,8 +41,20 @@ public enum WorkbenchView
     /// <summary>All namespaces in the current event store, with the ability to switch the active namespace.</summary>
     Namespaces = 10,
 
+    /// <summary>Registered OAuth applications on the Chronicle server.</summary>
+    Applications = 11,
+
+    /// <summary>Registered users on the Chronicle server.</summary>
+    Users = 12,
+
+    /// <summary>Known identities (actors) in the current event store namespace.</summary>
+    Identities = 13,
+
+    /// <summary>Event store subscriptions configured for the current event store.</summary>
+    Subscriptions = 14,
+
     // Detail views — entered with Enter from a primary view, exited with Escape.
-    // Values ≥ 100 are never shown in the tab bar.
+    // Values ≥ 100 are never shown in the nav pane.
 
     /// <summary>Full-screen detail for a single observer, with a navigable event-type sub-list.</summary>
     ObserverDetail = 100,

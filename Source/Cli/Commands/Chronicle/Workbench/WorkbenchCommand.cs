@@ -30,14 +30,26 @@ public class WorkbenchCommand : ChronicleCommand<WorkbenchSettings>
             return ExitCodes.ValidationError;
         }
 
+        // Restore persisted state from the previous session.
+        var state = WorkbenchState.Load();
+        if (settings.Interval == 5)
+        {
+            // Only apply saved interval when the user hasn't explicitly set one via --interval.
+            settings.Interval = state.Interval;
+        }
+
         var dataService = new WorkbenchDataService(services, settings);
 
         // Pre-fetch before launching the window so every view has real data from the first frame —
         // mirroring the old render-loop approach where data was fetched before the first render.
         var initialData = await dataService.FetchAsync(null, null, null, CancellationToken.None).ConfigureAwait(false);
 
-        var app = new WorkbenchApp(dataService, settings, services, initialData);
+        var app = new WorkbenchApp(dataService, settings, services, initialData, state);
         app.Run();
+
+        // Persist final state so next session restores the same context.
+        state.Interval = settings.Interval;
+        state.Save();
 
         AnsiConsole.MarkupLine($"  [{OutputFormatter.Muted.ToMarkup()}]Workbench closed.[/]");
         return ExitCodes.Success;

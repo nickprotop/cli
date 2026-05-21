@@ -2,9 +2,8 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using SharpConsoleUI;
-using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
-using UITableRow = SharpConsoleUI.Controls.TableRow;
+using SharpConsoleUI.Layout;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -12,20 +11,9 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// Read Models navigation item — filterable table of read model definitions with metadata in the detail pane.
 /// Pressing Enter on a selected row opens a detail overlay showing definition info and live instances.
 /// </summary>
-public class ReadModelsView : IWorkbenchView
+public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
 {
     ConsoleWindowSystem? _windowSystem;
-    TableControl? _table;
-    MarkupControl? _detailPane;
-    PromptControl? _filterPrompt;
-    string _currentFilter = string.Empty;
-    List<WorkbenchReadModel> _allItems = [];
-    WorkbenchData? _pendingData;
-
-    /// <summary>
-    /// Gets or sets the callback invoked when the filter input gains or loses focus.
-    /// </summary>
-    public Action<bool>? OnFilterFocusChanged { get; set; }
 
     /// <summary>
     /// Gets or sets the callback invoked when the user activates a read model row (Enter).
@@ -35,108 +23,29 @@ public class ReadModelsView : IWorkbenchView
     public Func<string, CancellationToken, Task<WorkbenchData>>? OnFetchInstances { get; set; }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        _table?.Dispose();
-        _detailPane?.Dispose();
-        _filterPrompt?.Dispose();
-    }
+    protected override IReadOnlyList<(string Name, TextJustification Justify, int? Width)> Columns =>
+    [
+        ("Container", TextJustification.Left, null),
+        ("Owner", TextJustification.Left, 12),
+        ("Source", TextJustification.Left, 14)
+    ];
 
     /// <inheritdoc/>
-    public IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
+    protected override string DetailPanelHeader => "READ MODEL";
+
+    /// <inheritdoc/>
+    public override IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
     {
         _windowSystem = windowSystem;
-
-        _table = Controls.Table()
-            .AddColumn("Container", SharpConsoleUI.Layout.TextJustification.Left, null)
-            .AddColumn("Owner", SharpConsoleUI.Layout.TextJustification.Left, 12)
-            .AddColumn("Source", SharpConsoleUI.Layout.TextJustification.Left, 14)
-            .Interactive()
-            .WithSorting()
-            .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .OnSelectedRowChanged((_, _) => RefreshDetail())
-            .WithName("ReadModelsTable")
-            .Build();
-
-        _filterPrompt = Controls.Prompt("Filter: ")
-            .WithHistory(true)
-            .WithTabCompleter((input, _) => GetCompletions())
-            .OnInputChanged((_, text) =>
-            {
-                _currentFilter = text ?? string.Empty;
-                RebuildFilteredRows();
-            })
-            .OnGotFocus((_, _) => OnFilterFocusChanged?.Invoke(true))
-            .OnLostFocus((_, _) => OnFilterFocusChanged?.Invoke(false))
-            .WithName("ReadModelsFilterPrompt")
-            .Build();
-
-        var leftPane = Controls.ScrollablePanel()
-            .AddControl(_filterPrompt)
-            .AddControl(_table)
-            .WithVerticalScroll(ScrollMode.None)
-            .WithName("ReadModelsLeftPane")
-            .Build();
-
-        _detailPane = new MarkupControl([$"[{WorkbenchColors.Muted.ToMarkup()}]Select a read model.[/]"])
-        {
-            Name = "ReadModelDetail",
-            Wrap = true
-        };
-
-        var detailScroll = Controls.ScrollablePanel()
-            .AddControl(_detailPane)
-            .WithVerticalScroll(ScrollMode.Scroll)
-            .WithPadding(1, 0, 1, 0)
-            .Build();
-
-        var root = HorizontalGridControl.Create()
-            .Column(c => c.Add(leftPane))
-            .WithSplitterAfter(0)
-            .Column(c => c.Width(50).Add(detailScroll))
-            .Build();
-
-        // Apply any data that arrived before controls were ready (NavigationView lazy init).
-        if (_pendingData is not null)
-            UpdateData(_pendingData);
-
-        return root;
-    }
-
-    /// <inheritdoc/>
-    public void ActivateFilter(Window window)
-    {
-        if (_filterPrompt is not null)
-        {
-            window.FocusControl(_filterPrompt);
-        }
-    }
-
-    /// <inheritdoc/>
-    public void ClearFilter()
-    {
-        _currentFilter = string.Empty;
-        _filterPrompt?.SetInput(string.Empty);
-        RebuildFilteredRows();
-    }
-
-    /// <inheritdoc/>
-    public void UpdateData(WorkbenchData data)
-    {
-        _pendingData = data;
-        if (_table is null) return;
-
-        _allItems = [.. data.ReadModelDefinitions.OrderBy(d => d.ContainerName)];
-        RebuildFilteredRows();
+        return base.BuildContent(windowSystem);
     }
 
     /// <summary>
     /// Opens a detail overlay for the currently selected read model row, if any.
-    /// No-op when no row is selected.
     /// </summary>
     public void OpenSelectedDetailOverlay()
     {
-        if (_table?.SelectedRow?.Tag is WorkbenchReadModel rm)
+        if (SelectedItem is WorkbenchReadModel rm)
         {
             OpenDetailOverlay(rm);
         }
@@ -148,7 +57,10 @@ public class ReadModelsView : IWorkbenchView
     /// <param name="rm">The read model to display.</param>
     public void OpenDetailOverlay(WorkbenchReadModel rm)
     {
-        if (_windowSystem is null) return;
+        if (_windowSystem is null)
+        {
+            return;
+        }
 
         var acc = WorkbenchColors.Accent.ToMarkup();
         var mut = WorkbenchColors.Muted.ToMarkup();
@@ -179,90 +91,65 @@ public class ReadModelsView : IWorkbenchView
         _windowSystem.AddWindow(window, activateWindow: true);
     }
 
-    static IEnumerable<string> GetCompletions() =>
-    [
-        "owner:client",
-        "owner:server"
-    ];
+    /// <inheritdoc/>
+    protected override IEnumerable<WorkbenchReadModel> GetItems(WorkbenchData data) =>
+        data.ReadModelDefinitions.OrderBy(d => d.ContainerName);
 
-    bool MatchesFilter(WorkbenchReadModel rm)
+    /// <inheritdoc/>
+    protected override string GetKey(WorkbenchReadModel item) => item.ContainerName;
+
+    /// <inheritdoc/>
+    protected override string[] BuildRow(WorkbenchReadModel item) =>
+        [item.ContainerName, item.Owner, item.Source];
+
+    /// <inheritdoc/>
+    protected override string RenderDetail(WorkbenchReadModel? item, WorkbenchData? data)
     {
-        if (string.IsNullOrEmpty(_currentFilter)) return true;
-
-        var f = _currentFilter;
-
-        if (f.StartsWith("owner:", StringComparison.OrdinalIgnoreCase))
+        if (item is null)
         {
-            var owner = f[6..];
-            return rm.Owner.Contains(owner, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return rm.ContainerName.Contains(f, StringComparison.OrdinalIgnoreCase) ||
-               rm.DisplayName.Contains(f, StringComparison.OrdinalIgnoreCase);
-    }
-
-    void RebuildFilteredRows()
-    {
-        if (_table is null) return;
-
-        var selectedKey = (_table.SelectedRow?.Tag as WorkbenchReadModel)?.ContainerName;
-
-        _table.ClearRows();
-        foreach (var rm in _allItems.Where(MatchesFilter))
-        {
-            _table.AddRow(new UITableRow([rm.ContainerName, rm.Owner, rm.Source]) { Tag = rm });
-        }
-
-        if (selectedKey is not null)
-        {
-            RestoreSelection(selectedKey);
-        }
-
-        RefreshDetail();
-    }
-
-    void RestoreSelection(string key)
-    {
-        if (_table is null) return;
-
-        for (var i = 0; i < _table.Rows.Count; i++)
-        {
-            if (_table.Rows[i].Tag is WorkbenchReadModel rm && rm.ContainerName == key)
-            {
-                _table.SelectedRowIndex = i;
-                return;
-            }
-        }
-    }
-
-    void RefreshDetail()
-    {
-        if (_table is null || _detailPane is null) return;
-
-        if (_table.SelectedRow?.Tag is not WorkbenchReadModel rm)
-        {
-            _detailPane.Text = $"[{WorkbenchColors.Muted.ToMarkup()}]Select a read model.[/]";
-            return;
+            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a read model.[/]";
         }
 
         var acc = WorkbenchColors.Accent.ToMarkup();
         var mut = WorkbenchColors.Muted.ToMarkup();
         var suc = WorkbenchColors.Success.ToMarkup();
-        var queryableColor = rm.IsQueryable ? suc : mut;
+        var queryableColor = item.IsQueryable ? suc : mut;
 
-        _detailPane.Text = string.Join(
+        return string.Join(
             "\n",
             $"[{acc}][bold]READ MODEL[/][/]",
             string.Empty,
-            $"  [{mut}]Container[/]    {rm.ContainerName}",
-            $"  [{mut}]Display Name[/] {rm.DisplayName}",
-            $"  [{mut}]Owner[/]        {rm.Owner}",
-            $"  [{mut}]Source[/]       {rm.Source}",
-            $"  [{mut}]Queryable[/]    [{queryableColor}]{(rm.IsQueryable ? "Yes" : "No")}[/]",
-            $"  [{mut}]Identifier[/]   {rm.Identifier}",
+            $"  [{mut}]Container[/]    {item.ContainerName}",
+            $"  [{mut}]Display Name[/] {item.DisplayName}",
+            $"  [{mut}]Owner[/]        {item.Owner}",
+            $"  [{mut}]Source[/]       {item.Source}",
+            $"  [{mut}]Queryable[/]    [{queryableColor}]{(item.IsQueryable ? "Yes" : "No")}[/]",
+            $"  [{mut}]Identifier[/]   {item.Identifier}",
             string.Empty,
             $"[{mut}]Press[/] [bold]Enter[/] [{mut}]to view instances[/]");
     }
+
+    /// <inheritdoc/>
+    protected override bool MatchesFilter(WorkbenchReadModel item, string filter)
+    {
+        if (filter.StartsWith("owner:", StringComparison.OrdinalIgnoreCase))
+        {
+            return item.Owner.Contains(filter[6..], StringComparison.OrdinalIgnoreCase);
+        }
+
+        return item.ContainerName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+               item.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc/>
+    protected override IEnumerable<string> GetCompletions(string input) =>
+    [
+        "owner:client",
+        "owner:server"
+    ];
+
+    /// <inheritdoc/>
+    protected override void OnRowActivated(WorkbenchReadModel item) => OpenDetailOverlay(item);
 
     string BuildInstancesContent(WorkbenchReadModel rm)
     {

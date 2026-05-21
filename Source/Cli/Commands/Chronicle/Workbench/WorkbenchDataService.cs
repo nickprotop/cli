@@ -2,7 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System.Text.Json;
+using Cratis.Chronicle.Contracts.Identities;
 using Cratis.Chronicle.Contracts.Jobs;
+using Cratis.Chronicle.Contracts.Observation.EventStoreSubscriptions;
 using Cratis.Cli.Commands.Chronicle.ReadModels;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
@@ -52,8 +54,12 @@ public class WorkbenchDataService(IServices services, WorkbenchSettings settings
         var declarationsTask = FetchProjectionDeclarationsAsync(eventStore);
         var readModelsTask = FetchReadModelDefinitionsAsync(eventStore);
         var namespacesTask = FetchNamespacesAsync(eventStore);
+        var applicationsTask = FetchApplicationsAsync();
+        var usersTask = FetchUsersAsync();
+        var identitiesTask = FetchIdentitiesAsync(eventStore, ns);
+        var subscriptionsTask = FetchSubscriptionsAsync(eventStore);
 
-        await Task.WhenAll(versionTask, eventStoresTask, observersTask, failedPartitionsTask, jobsTask, recommendationsTask, tailTask, eventTypesTask, projectionsTask, declarationsTask, readModelsTask, namespacesTask).ConfigureAwait(false);
+        await Task.WhenAll(versionTask, eventStoresTask, observersTask, failedPartitionsTask, jobsTask, recommendationsTask, tailTask, eventTypesTask, projectionsTask, declarationsTask, readModelsTask, namespacesTask, applicationsTask, usersTask, identitiesTask, subscriptionsTask).ConfigureAwait(false);
 
         // All tasks are complete — awaiting them returns immediately.
         var (serverVersion, isConnected) = await versionTask.ConfigureAwait(false);
@@ -68,6 +74,10 @@ public class WorkbenchDataService(IServices services, WorkbenchSettings settings
         var projectionDeclarations = await declarationsTask.ConfigureAwait(false);
         var readModelDefinitions = await readModelsTask.ConfigureAwait(false);
         var namespaceNames = await namespacesTask.ConfigureAwait(false);
+        var applications = await applicationsTask.ConfigureAwait(false);
+        var users = await usersTask.ConfigureAwait(false);
+        var identities = await identitiesTask.ConfigureAwait(false);
+        var subscriptions = await subscriptionsTask.ConfigureAwait(false);
 
         // Recent events depends on the tail — fetch after the parallel batch.
         var recentEvents = await FetchRecentEventsAsync(eventStore, ns, tailSequenceNumber).ConfigureAwait(false);
@@ -98,7 +108,11 @@ public class WorkbenchDataService(IServices services, WorkbenchSettings settings
             NamespaceNames: namespaceNames,
             ReadModelInstances: readModelInstances,
             ReadModelInstancesTotalCount: readModelInstancesTotalCount,
-            ReadModelInstancesError: readModelInstancesError);
+            ReadModelInstancesError: readModelInstancesError,
+            Applications: applications,
+            Users: users,
+            Identities: identities,
+            EventStoreSubscriptions: subscriptions);
     }
 
     /// <summary>
@@ -297,6 +311,43 @@ public class WorkbenchDataService(IServices services, WorkbenchSettings settings
         {
             return [.. await services.Namespaces.GetNamespaces(
                 new GetNamespacesRequest { EventStore = eventStore }).ConfigureAwait(false)];
+        }
+        catch { return []; }
+    }
+
+    async Task<IReadOnlyList<Application>> FetchApplicationsAsync()
+    {
+        try { return [.. await services.Applications.GetAll().ConfigureAwait(false) ?? []]; }
+        catch { return []; }
+    }
+
+    async Task<IReadOnlyList<User>> FetchUsersAsync()
+    {
+        try { return [.. await services.Users.GetAll().ConfigureAwait(false) ?? []]; }
+        catch { return []; }
+    }
+
+    async Task<IReadOnlyList<Identity>> FetchIdentitiesAsync(string eventStore, string ns)
+    {
+        try
+        {
+            return [.. await services.Identities.GetIdentities(new GetIdentitiesRequest
+            {
+                EventStore = eventStore,
+                Namespace = ns
+            }).ConfigureAwait(false)];
+        }
+        catch { return []; }
+    }
+
+    async Task<IReadOnlyList<EventStoreSubscriptionDefinition>> FetchSubscriptionsAsync(string eventStore)
+    {
+        try
+        {
+            return [.. await services.EventStoreSubscriptions.GetSubscriptions(new GetEventStoreSubscriptionsRequest
+            {
+                TargetEventStore = eventStore
+            }).ConfigureAwait(false)];
         }
         catch { return []; }
     }

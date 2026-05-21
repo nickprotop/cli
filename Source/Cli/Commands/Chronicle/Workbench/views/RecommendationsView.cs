@@ -1,21 +1,17 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using SharpConsoleUI;
-using SharpConsoleUI.Builders;
-using SharpConsoleUI.Controls;
-using UITableRow = SharpConsoleUI.Controls.TableRow;
+using SharpConsoleUI.Layout;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
 /// <summary>
-/// Recommendations tab — table of pending recommendations with apply/ignore actions in the bordered detail pane.
+/// Recommendations tab — filterable table of pending recommendations with apply/ignore actions.
 /// </summary>
-public class RecommendationsView : IWorkbenchView
+public class RecommendationsView : FilterableTableView<Recommendation>
 {
-    TableControl? _table;
-    PanelControl? _detailPanel;
-    WorkbenchData? _pendingData;
+    /// <summary>Gets the currently selected recommendation, or <see langword="null"/> if none is selected.</summary>
+    public Recommendation? SelectedRecommendation => SelectedItem;
 
     /// <summary>
     /// Gets or sets the callback invoked when the user applies a recommendation.
@@ -38,122 +34,101 @@ public class RecommendationsView : IWorkbenchView
     public Action<IReadOnlyList<Recommendation>>? OnIgnoreAll { get; set; }
 
     /// <summary>
-    /// Returns all recommendations that are currently checked (checkbox mode).
+    /// Gets all recommendations that are currently checked (checkbox mode).
     /// </summary>
-    /// <returns>A list of checked <see cref="Recommendation"/> items.</returns>
-    public IReadOnlyList<Recommendation> GetCheckedItems() =>
-        [.. (_table?.GetCheckedRows() ?? []).Select(r => r.Tag).OfType<Recommendation>()];
+    public IReadOnlyList<Recommendation> Checked => CheckedItems;
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        _table?.Dispose();
-        _detailPanel?.Dispose();
-    }
+    protected override IReadOnlyList<(string Name, TextJustification Justify, int? Width)> Columns =>
+    [
+        ("Name", TextJustification.Left, null),
+        ("Type", TextJustification.Left, 20)
+    ];
 
     /// <inheritdoc/>
-    public IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
-    {
-        _table = Controls.Table()
-            .AddColumn("Name", SharpConsoleUI.Layout.TextJustification.Left, null)
-            .AddColumn("Type", SharpConsoleUI.Layout.TextJustification.Left, 20)
-            .Interactive()
-            .WithCheckboxMode()
-            .WithFiltering()
-            .WithSorting()
-            .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .OnSelectedRowChanged((_, _) => RefreshDetail())
-            .WithName("RecommendationsTable")
-            .Build();
-
-        _detailPanel = Controls.Panel()
-            .WithContent($"[{WorkbenchColors.Muted.ToMarkup()}]Select a recommendation.[/]")
-            .WithHeader(" RECOMMENDATION ")
-            .Rounded()
-            .WithBorderColor(WorkbenchColors.Warning)
-            .WithPadding(1, 0, 1, 0)
-            .FillVertical()
-            .WithName("RecommendationDetailPanel")
-            .Build();
-
-        var root = HorizontalGridControl.Create()
-            .Column(c => c.Add(_table))
-            .WithSplitterAfter(0)
-            .Column(c => c.Width(50).Add(_detailPanel))
-            .Build();
-
-        // Apply any data that arrived before controls were ready (NavigationView lazy init).
-        if (_pendingData is not null)
-            UpdateData(_pendingData);
-
-        return root;
-    }
+    protected override string DetailPanelHeader => "RECOMMENDATION";
 
     /// <inheritdoc/>
-    public void UpdateData(WorkbenchData data)
+    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Warning;
+
+    /// <inheritdoc/>
+    protected override bool HasCheckboxMode => true;
+
+    /// <inheritdoc/>
+    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(Recommendation item)
     {
-        _pendingData = data;
-        if (_table is null) return;
-
-        var selectedKey = (_table.SelectedRow?.Tag as Recommendation)?.Id.ToString();
-
-        _table.ClearRows();
-        foreach (var rec in data.Recommendations)
+        if (OnApply is not null)
         {
-            _table.AddRow(new UITableRow([rec.Name ?? rec.Id.ToString(), rec.Type ?? "—"]) { Tag = rec });
+            yield return ("Apply recommendation", "A", () => OnApply(item));
         }
 
-        if (selectedKey is not null)
+        if (OnIgnore is not null)
         {
-            RestoreSelection(selectedKey);
+            yield return ("Ignore recommendation", "I", () => OnIgnore(item));
         }
 
-        RefreshDetail();
-    }
-
-    void RestoreSelection(string key)
-    {
-        if (_table is null) return;
-
-        for (var i = 0; i < _table.Rows.Count; i++)
+        var checkedCount = Checked.Count;
+        if (OnApplyAll is not null && checkedCount > 1)
         {
-            if (_table.Rows[i].Tag is Recommendation rec && rec.Id.ToString() == key)
-            {
-                _table.SelectedRowIndex = i;
-                return;
-            }
+            yield return ($"Apply {checkedCount} checked", null, () => OnApplyAll(Checked));
+        }
+
+        if (OnIgnoreAll is not null && checkedCount > 1)
+        {
+            yield return ($"Ignore {checkedCount} checked", null, () => OnIgnoreAll(Checked));
         }
     }
 
-    void RefreshDetail()
-    {
-        if (_table is null || _detailPanel is null) return;
+    /// <inheritdoc/>
+    protected override IEnumerable<Recommendation> GetItems(WorkbenchData data) => data.Recommendations;
 
-        if (_table.SelectedRow?.Tag is not Recommendation rec)
+    /// <inheritdoc/>
+    protected override string GetKey(Recommendation item) => item.Id.ToString();
+
+    /// <inheritdoc/>
+    protected override string[] BuildRow(Recommendation item) =>
+        [item.Name ?? item.Id.ToString(), item.Type ?? "—"];
+
+    /// <inheritdoc/>
+    protected override string RenderDetail(Recommendation? item, WorkbenchData? data)
+    {
+        if (item is null)
         {
-            _detailPanel.Content = $"[{WorkbenchColors.Muted.ToMarkup()}]Select a recommendation.[/]";
-            return;
+            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a recommendation.[/]";
         }
 
         var mut = WorkbenchColors.Muted.ToMarkup();
 
         var lines = new List<string>
         {
-            $"[{mut}]Name[/]  {rec.Name ?? rec.Id.ToString()}",
-            $"[{mut}]Type[/]  {rec.Type ?? "—"}",
+            $"[{mut}]Name[/]  {item.Name ?? item.Id.ToString()}",
+            $"[{mut}]Type[/]  {item.Type ?? "—"}"
         };
 
-        if (!string.IsNullOrEmpty(rec.Description))
+        if (!string.IsNullOrEmpty(item.Description))
         {
             lines.Add(string.Empty);
             lines.Add($"[{mut}]Description:[/]");
-            lines.Add($"  {rec.Description}");
+            lines.Add($"  {item.Description}");
         }
 
         lines.Add(string.Empty);
-        if (OnApply is not null) lines.Add($"[{mut}]Press[/] [bold]A[/] [{mut}]to apply[/]");
-        if (OnIgnore is not null) lines.Add($"[{mut}]Press[/] [bold]I[/] [{mut}]to ignore[/]");
+        if (OnApply is not null)
+        {
+            lines.Add($"[{mut}]Press[/] [bold]A[/] [{mut}]to apply[/]");
+        }
 
-        _detailPanel.Content = string.Join('\n', lines);
+        if (OnIgnore is not null)
+        {
+            lines.Add($"[{mut}]Press[/] [bold]I[/] [{mut}]to ignore[/]");
+        }
+
+        return string.Join('\n', lines);
     }
+
+    /// <inheritdoc/>
+    protected override bool MatchesFilter(Recommendation item, string filter) =>
+        (item.Name ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        (item.Type ?? string.Empty).Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        item.Id.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase);
 }

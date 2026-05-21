@@ -1,7 +1,9 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using Cratis.Chronicle.Contracts.Identities;
 using Cratis.Chronicle.Contracts.Jobs;
+using Cratis.Chronicle.Contracts.Observation.EventStoreSubscriptions;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -47,6 +49,10 @@ public record WorkbenchReadModel(
 /// <param name="ReadModelInstances">Instances for the currently focused read model (populated in ReadModelDetail view only).</param>
 /// <param name="ReadModelInstancesTotalCount">Total instance count for the currently focused read model.</param>
 /// <param name="ReadModelInstancesError">Error message from the last read model instances fetch, or <see langword="null"/>.</param>
+/// <param name="Applications">All registered OAuth applications on the Chronicle server.</param>
+/// <param name="Users">All registered users on the Chronicle server.</param>
+/// <param name="Identities">All known identities in the current event store namespace.</param>
+/// <param name="EventStoreSubscriptions">All event store subscriptions configured for the current event store.</param>
 public record WorkbenchData(
     string ConnectionString,
     string EventStore,
@@ -69,7 +75,11 @@ public record WorkbenchData(
     IReadOnlyList<string> NamespaceNames,
     IReadOnlyList<string> ReadModelInstances,
     int ReadModelInstancesTotalCount,
-    string? ReadModelInstancesError)
+    string? ReadModelInstancesError,
+    IReadOnlyList<Application> Applications,
+    IReadOnlyList<User> Users,
+    IReadOnlyList<Identity> Identities,
+    IReadOnlyList<EventStoreSubscriptionDefinition> EventStoreSubscriptions)
 {
     /// <summary>
     /// Gets the number of observers in the <see cref="ObserverRunningState.Active"/> state.
@@ -118,5 +128,9 @@ public record WorkbenchData(
         NamespaceNames: [],
         ReadModelInstances: [],
         ReadModelInstancesTotalCount: 0,
-        ReadModelInstancesError: null);
+        ReadModelInstancesError: null,
+        Applications: [],
+        Users: [],
+        Identities: [],
+        EventStoreSubscriptions: []);
 }

@@ -36,14 +36,19 @@ public class DetailOverlayWindow
 
         foreach (var (tabName, content) in tabs)
         {
-            var markup = new MarkupControl([content]) { Wrap = true };
-            var scrollPane = Controls.ScrollablePanel()
-                .AddControl(markup)
-                .WithVerticalScroll(ScrollMode.Scroll)
-                .WithPadding(1, 1, 1, 1)
+            // Use a read-only MultilineEdit so text can be selected with mouse/keyboard and copied.
+            // Markup is stripped to plain text — colors are not rendered in editable controls.
+            var plainText = Markup.Remove(content);
+            var editor = Controls.MultilineEdit(plainText)
+                .AsReadOnly(true)
+                .WrapWords()
+                .WithVerticalScrollbar(ScrollbarVisibility.Auto)
+                .WithSelectionColors(WorkbenchColors.Accent, WorkbenchColors.Background)
+                .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
+                .WithFocusedColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
                 .Build();
 
-            tabBuilder.AddTab(tabName, scrollPane);
+            tabBuilder.AddTab(tabName, editor);
         }
 
         var tabControl = tabBuilder.Fill().Build();

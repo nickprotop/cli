@@ -1,30 +1,17 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using SharpConsoleUI;
-using SharpConsoleUI.Builders;
-using SharpConsoleUI.Controls;
-using UITableRow = SharpConsoleUI.Controls.TableRow;
+using SharpConsoleUI.Layout;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
 /// <summary>
-/// Observers navigation item — sortable table with a filter prompt on the left and bordered detail pane on the right.
+/// Observers navigation item — sortable, filterable table with a detail pane showing observer state and event types.
 /// </summary>
-public class ObserversView : IWorkbenchView
+public class ObserversView : FilterableTableView<ObserverInformation>
 {
-    TableControl? _table;
-    PanelControl? _detailPanel;
-    PromptControl? _filterPrompt;
-    ulong? _tailSequenceNumber;
-    string _currentFilter = string.Empty;
-    List<ObserverInformation> _allItems = [];
-    WorkbenchData? _pendingData;
-
-    /// <summary>
-    /// Gets or sets the callback invoked when the filter input gains or loses focus.
-    /// </summary>
-    public Action<bool>? OnFilterFocusChanged { get; set; }
+    /// <summary>Gets the currently selected observer, or <see langword="null"/> if none is selected.</summary>
+    public ObserverInformation? SelectedObserver => SelectedItem;
 
     /// <summary>
     /// Gets or sets the callback invoked when the user requests a replay of the selected observer.
@@ -37,106 +24,129 @@ public class ObserversView : IWorkbenchView
     public Action<IReadOnlyList<ObserverInformation>>? OnReplayAll { get; set; }
 
     /// <summary>
-    /// Returns all observers that are currently checked (checkbox mode).
+    /// Gets all observers that are currently checked (checkbox mode).
     /// </summary>
-    /// <returns>A list of checked <see cref="ObserverInformation"/> items.</returns>
-    public IReadOnlyList<ObserverInformation> GetCheckedItems() =>
-        [.. (_table?.GetCheckedRows() ?? []).Select(r => r.Tag).OfType<ObserverInformation>()];
+    public IReadOnlyList<ObserverInformation> Checked => CheckedItems;
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        _table?.Dispose();
-        _detailPanel?.Dispose();
-        _filterPrompt?.Dispose();
-    }
+    protected override IReadOnlyList<(string Name, TextJustification Justify, int? Width)> Columns =>
+    [
+        ("State", TextJustification.Left, 18),
+        ("Id", TextJustification.Left, null),
+        ("Type", TextJustification.Left, 16)
+    ];
 
     /// <inheritdoc/>
-    public IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
-    {
-        _table = Controls.Table()
-            .AddColumn("State", SharpConsoleUI.Layout.TextJustification.Left, 18)
-            .AddColumn("Id", SharpConsoleUI.Layout.TextJustification.Left, null)
-            .AddColumn("Type", SharpConsoleUI.Layout.TextJustification.Left, 16)
-            .AddColumn("Seq", SharpConsoleUI.Layout.TextJustification.Right, 12)
-            .Interactive()
-            .WithCheckboxMode()
-            .WithSorting()
-            .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .OnSelectedRowChanged((_, _) => RefreshDetail())
-            .WithName("ObserversTable")
-            .Build();
-
-        _filterPrompt = Controls.Prompt("Filter: ")
-            .WithHistory(true)
-            .WithTabCompleter((input, _) => GetCompletions(input))
-            .OnInputChanged((_, text) =>
-            {
-                _currentFilter = text ?? string.Empty;
-                RebuildFilteredRows();
-            })
-            .OnGotFocus((_, _) => OnFilterFocusChanged?.Invoke(true))
-            .OnLostFocus((_, _) => OnFilterFocusChanged?.Invoke(false))
-            .WithName("ObserversFilterPrompt")
-            .Build();
-
-        var leftPane = Controls.ScrollablePanel()
-            .AddControl(_filterPrompt)
-            .AddControl(_table)
-            .WithVerticalScroll(ScrollMode.None)
-            .WithName("ObserversLeftPane")
-            .Build();
-
-        _detailPanel = Controls.Panel()
-            .WithContent($"[{WorkbenchColors.Muted.ToMarkup()}]Select an observer.[/]")
-            .WithHeader(" OBSERVER ")
-            .Rounded()
-            .WithBorderColor(WorkbenchColors.Accent)
-            .WithPadding(1, 0, 1, 0)
-            .FillVertical()
-            .WithName("ObserverDetailPanel")
-            .Build();
-
-        var root = HorizontalGridControl.Create()
-            .Column(c => c.Add(leftPane))
-            .WithSplitterAfter(0)
-            .Column(c => c.Width(45).Add(_detailPanel))
-            .Build();
-
-        // Apply any data that arrived before controls were ready (NavigationView lazy init).
-        if (_pendingData is not null)
-            UpdateData(_pendingData);
-
-        return root;
-    }
+    protected override string DetailPanelHeader => "OBSERVER";
 
     /// <inheritdoc/>
-    public void ActivateFilter(Window window)
+    protected override bool HasCheckboxMode => true;
+
+    /// <inheritdoc/>
+    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(ObserverInformation item)
     {
-        if (_filterPrompt is not null)
+        if (OnReplay is not null)
         {
-            window.FocusControl(_filterPrompt);
+            yield return ("Replay observer", "R", () => OnReplay(item));
+        }
+
+        var checkedCount = Checked.Count;
+        if (OnReplayAll is not null && checkedCount > 1)
+        {
+            yield return ($"Replay {checkedCount} checked", null, () => OnReplayAll(Checked));
         }
     }
 
     /// <inheritdoc/>
-    public void ClearFilter()
+    protected override IEnumerable<ObserverInformation> GetItems(WorkbenchData data) =>
+        data.Observers.OrderBy(ObserverSortOrder).ThenBy(o => o.Id);
+
+    /// <inheritdoc/>
+    protected override string GetKey(ObserverInformation item) => item.Id;
+
+    /// <inheritdoc/>
+    protected override string[] BuildRow(ObserverInformation item)
     {
-        _currentFilter = string.Empty;
-        _filterPrompt?.SetInput(string.Empty);
-        RebuildFilteredRows();
+        var stateColor = GetObserverStateColor(item);
+        var icon = GetObserverIcon(item);
+
+        return
+        [
+            $"[{stateColor}]{icon} {item.RunningState}[/]",
+            item.Id,
+            item.Type.ToString()
+        ];
     }
 
     /// <inheritdoc/>
-    public void UpdateData(WorkbenchData data)
+    protected override string RenderDetail(ObserverInformation? item, WorkbenchData? data)
     {
-        _pendingData = data;
-        if (_table is null) return;
+        if (item is null)
+        {
+            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select an observer.[/]";
+        }
 
-        _tailSequenceNumber = data.TailSequenceNumber;
-        _allItems = [.. data.Observers.OrderBy(ObserverSortOrder).ThenBy(o => o.Id)];
-        RebuildFilteredRows();
+        var mut = WorkbenchColors.Muted.ToMarkup();
+        var stateColor = GetObserverStateColor(item);
+
+        var lines = new List<string>
+        {
+            $"[{mut}]Id[/]      {item.Id}",
+            $"[{mut}]Type[/]    {item.Type}",
+            $"[{mut}]State[/]   [{stateColor}]{item.RunningState}[/]",
+            $"[{mut}]Last seq[/] {(item.LastHandledEventSequenceNumber == ulong.MaxValue ? "N/A" : item.LastHandledEventSequenceNumber.ToString("N0"))}",
+            string.Empty,
+            $"[{mut}]Event Types:[/]"
+        };
+
+        foreach (var et in (item.EventTypes ?? []).OrderBy(e => e.Id))
+        {
+            lines.Add($"  • {et.Id} gen {et.Generation}");
+        }
+
+        if (OnReplay is not null)
+        {
+            lines.Add(string.Empty);
+            lines.Add($"[{mut}]Press[/] [bold]R[/] [{mut}]to replay[/]");
+        }
+
+        return string.Join('\n', lines);
     }
+
+    /// <inheritdoc/>
+    protected override bool MatchesFilter(ObserverInformation item, string filter)
+    {
+        if (filter.StartsWith("state:", StringComparison.OrdinalIgnoreCase))
+        {
+            return item.RunningState.ToString().Contains(filter[6..], StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (filter.StartsWith("type:", StringComparison.OrdinalIgnoreCase))
+        {
+            return item.Type.ToString().Contains(filter[5..], StringComparison.OrdinalIgnoreCase);
+        }
+
+        // event:TypeId — match observers that subscribe to the given event type ID
+        if (filter.StartsWith("event:", StringComparison.OrdinalIgnoreCase))
+        {
+            var eventTypeId = filter[6..];
+            return (item.EventTypes ?? []).Any(et => et.Id.Contains(eventTypeId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return item.Id.Contains(filter, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc/>
+    protected override IEnumerable<string> GetCompletions(string input) =>
+    [
+        "state:active",
+        "state:replaying",
+        "state:disconnected",
+        "state:suspended",
+        "type:projection",
+        "type:reducer",
+        "type:reactor"
+    ];
 
     static int ObserverSortOrder(ObserverInformation o) => o.RunningState switch
     {
@@ -162,139 +172,4 @@ public class ObserversView : IWorkbenchView
         ObserverRunningState.Disconnected => "⊘",
         _ => "○"
     };
-
-    IEnumerable<string> GetCompletions(string input) =>
-    [
-        "state:active",
-        "state:replaying",
-        "state:disconnected",
-        "state:suspended",
-        "type:projection",
-        "type:reducer",
-        "type:reactor"
-    ];
-
-    bool MatchesFilter(ObserverInformation obs)
-    {
-        if (string.IsNullOrEmpty(_currentFilter)) return true;
-
-        var f = _currentFilter;
-
-        if (f.StartsWith("state:", StringComparison.OrdinalIgnoreCase))
-        {
-            var state = f[6..];
-            return obs.RunningState.ToString().Contains(state, StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (f.StartsWith("type:", StringComparison.OrdinalIgnoreCase))
-        {
-            var type = f[5..];
-            return obs.Type.ToString().Contains(type, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return obs.Id.Contains(f, StringComparison.OrdinalIgnoreCase);
-    }
-
-    void RebuildFilteredRows()
-    {
-        if (_table is null) return;
-
-        var selectedKey = (_table.SelectedRow?.Tag as ObserverInformation)?.Id;
-
-        _table.ClearRows();
-        foreach (var obs in _allItems.Where(MatchesFilter))
-        {
-            _table.AddRow(new UITableRow(BuildObserverRow(obs)) { Tag = obs });
-        }
-
-        if (selectedKey is not null)
-        {
-            RestoreSelection(selectedKey);
-        }
-
-        RefreshDetail();
-    }
-
-    void RestoreSelection(string key)
-    {
-        if (_table is null) return;
-
-        for (var i = 0; i < _table.Rows.Count; i++)
-        {
-            if (_table.Rows[i].Tag is ObserverInformation obs && obs.Id == key)
-            {
-                _table.SelectedRowIndex = i;
-                return;
-            }
-        }
-    }
-
-    string[] BuildObserverRow(ObserverInformation obs)
-    {
-        var stateColor = GetObserverStateColor(obs);
-        var icon = GetObserverIcon(obs);
-
-        string seqCell;
-        if (obs.RunningState == ObserverRunningState.Replaying && _tailSequenceNumber.HasValue && _tailSequenceNumber.Value > 0)
-        {
-            var tail = _tailSequenceNumber.Value;
-            var current = obs.LastHandledEventSequenceNumber == ulong.MaxValue ? 0UL : obs.LastHandledEventSequenceNumber;
-            var pct = (int)Math.Min(100, current * 100 / tail);
-            var filledBars = pct / 10;
-            var bar = new string('█', filledBars) + new string('░', 10 - filledBars);
-            seqCell = $"[{WorkbenchColors.Warning.ToMarkup()}]{bar} {pct}%[/]";
-        }
-        else
-        {
-            seqCell = obs.LastHandledEventSequenceNumber == ulong.MaxValue
-                ? $"[{WorkbenchColors.Muted.ToMarkup()}]—[/]"
-                : obs.LastHandledEventSequenceNumber.ToString("N0");
-        }
-
-        return
-        [
-            $"[{stateColor}]{icon} {obs.RunningState}[/]",
-            obs.Id,
-            obs.Type.ToString(),
-            seqCell
-        ];
-    }
-
-    void RefreshDetail()
-    {
-        if (_table is null || _detailPanel is null) return;
-
-        var row = _table.SelectedRow;
-        if (row?.Tag is not ObserverInformation obs)
-        {
-            _detailPanel.Content = $"[{WorkbenchColors.Muted.ToMarkup()}]Select an observer.[/]";
-            return;
-        }
-
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var stateColor = GetObserverStateColor(obs);
-
-        var lines = new List<string>
-        {
-            $"[{mut}]Id[/]      {obs.Id}",
-            $"[{mut}]Type[/]    {obs.Type}",
-            $"[{mut}]State[/]   [{stateColor}]{obs.RunningState}[/]",
-            $"[{mut}]Seq[/]     {obs.LastHandledEventSequenceNumber}",
-            string.Empty,
-            $"[{mut}]Event Types:[/]"
-        };
-
-        foreach (var et in (obs.EventTypes ?? []).OrderBy(e => e.Id))
-        {
-            lines.Add($"  • {et.Id} gen {et.Generation}");
-        }
-
-        if (OnReplay is not null)
-        {
-            lines.Add(string.Empty);
-            lines.Add($"[{mut}]Press[/] [bold]R[/] [{mut}]to replay[/]");
-        }
-
-        _detailPanel.Content = string.Join('\n', lines);
-    }
 }

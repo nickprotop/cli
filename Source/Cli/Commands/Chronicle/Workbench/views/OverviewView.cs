@@ -14,13 +14,14 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 public class OverviewView : IWorkbenchView
 {
     readonly Queue<double> _observerHistory = new(capacity: 10);
-    readonly Queue<double> _eventRateHistory = new(capacity: 10);
     PanelControl? _healthPanel;
     PanelControl? _observerPanel;
     PanelControl? _attentionPanel;
     SparklineControl? _observerSparkline;
-    SparklineControl? _eventRateSparkline;
     WorkbenchData? _pendingData;
+
+    /// <inheritdoc/>
+    public bool IsActive { get; set; }
 
     /// <inheritdoc/>
     public void Dispose()
@@ -29,7 +30,6 @@ public class OverviewView : IWorkbenchView
         _observerPanel?.Dispose();
         _attentionPanel?.Dispose();
         _observerSparkline?.Dispose();
-        _eventRateSparkline?.Dispose();
     }
 
     /// <inheritdoc/>
@@ -49,13 +49,6 @@ public class OverviewView : IWorkbenchView
             .WithHeight(3)
             .WithBarColor(WorkbenchColors.Accent)
             .WithTitle("observer count history", WorkbenchColors.Muted)
-            .WithData([0])
-            .Build();
-
-        _eventRateSparkline = new SparklineBuilder()
-            .WithHeight(2)
-            .WithBarColor(WorkbenchColors.Success)
-            .WithTitle("events/cycle", WorkbenchColors.Muted)
             .WithData([0])
             .Build();
 
@@ -81,7 +74,7 @@ public class OverviewView : IWorkbenchView
 
         var root = Controls.HorizontalGrid()
             .Column(col => col.Add(_healthPanel))
-            .Column(col => col.Add(_observerPanel).Add(_observerSparkline).Add(_eventRateSparkline))
+            .Column(col => col.Add(_observerPanel).Add(_observerSparkline))
             .Column(col => col.Add(_attentionPanel))
             .Build();
 
@@ -113,7 +106,12 @@ public class OverviewView : IWorkbenchView
             ? $"[bold]#{data.TailSequenceNumber.Value:N0}[/]"
             : $"[{mut}]—[/]";
 
+        var acc = WorkbenchColors.Accent.ToMarkup();
         _healthPanel.Content =
+            "[bold]CONTEXT[/]\n" +
+            $"  [{mut}]Store[/]     [{acc}]{data.EventStore}[/]\n" +
+            $"  [{mut}]Namespace[/] [{acc}]{data.Namespace}[/]\n" +
+            "\n" +
             $"[{mut}]Status[/]   {connStatus}\n" +
             $"[{mut}]Version[/]  {version}\n" +
             $"[{mut}]Tail seq[/] {seq}\n" +
@@ -164,21 +162,6 @@ public class OverviewView : IWorkbenchView
         }
 
         _attentionPanel!.Content = string.Join('\n', attentionLines);
-    }
-
-    /// <summary>
-    /// Updates the event-rate sparkline with the number of new events observed this refresh cycle.
-    /// </summary>
-    /// <param name="newEventsThisCycle">The count of new events appended since the last cycle.</param>
-    public void UpdateEventDelta(int newEventsThisCycle)
-    {
-        _eventRateHistory.Enqueue(newEventsThisCycle);
-        while (_eventRateHistory.Count > 10)
-        {
-            _eventRateHistory.Dequeue();
-        }
-
-        _eventRateSparkline?.SetDataPoints(_eventRateHistory);
     }
 
     void UpdateObserverSparkline(int totalObservers)

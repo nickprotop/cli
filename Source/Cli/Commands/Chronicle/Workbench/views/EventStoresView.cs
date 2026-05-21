@@ -18,6 +18,9 @@ public class EventStoresView : IWorkbenchView
     MarkupControl? _helpPane;
     WorkbenchData? _pendingData;
 
+    /// <inheritdoc/>
+    public bool IsActive { get; set; }
+
     /// <summary>
     /// Gets or sets the callback invoked when the user switches to a different event store.
     /// </summary>

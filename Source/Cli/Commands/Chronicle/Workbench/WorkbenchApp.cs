@@ -13,7 +13,8 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <param name="settings">The workbench command settings.</param>
 /// <param name="services">The Chronicle gRPC service clients.</param>
 /// <param name="initialData">Pre-fetched data snapshot to populate all views before the first frame is rendered.</param>
-public class WorkbenchApp(WorkbenchDataService dataService, WorkbenchSettings settings, IServices services, WorkbenchData initialData)
+/// <param name="state">Persisted workbench state from the previous session.</param>
+public class WorkbenchApp(WorkbenchDataService dataService, WorkbenchSettings settings, IServices services, WorkbenchData initialData, WorkbenchState state)
 {
     /// <summary>
     /// Runs the workbench TUI and blocks until the user exits.
@@ -23,7 +24,7 @@ public class WorkbenchApp(WorkbenchDataService dataService, WorkbenchSettings se
     {
         var windowSystem = new ConsoleWindowSystem(new NetConsoleDriver(RenderMode.Buffer));
 
-        var mainWindow = new MainWindow(windowSystem, dataService, settings, services, initialData);
+        var mainWindow = new MainWindow(windowSystem, dataService, settings, services, initialData, state);
         windowSystem.AddWindow(mainWindow.Build(), activateWindow: true);
 
         return windowSystem.Run();
