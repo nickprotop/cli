@@ -14,6 +14,14 @@ public class JobsView : FilterableTableView<Job>
     /// <summary>Gets the currently selected job, or <see langword="null"/> if none is selected.</summary>
     public Job? SelectedJob => SelectedItem;
 
+    /// <inheritdoc/>
+    public override string ViewHelp =>
+        "Lists all background jobs and their current status.\n" +
+        "  [S]  Stop the selected job\n" +
+        "  [U]  Resume a stopped job\n" +
+        "  [Space]  Check / uncheck row for bulk operations\n" +
+        "  [S] / [U]  (with 2+ checked) Bulk stop / resume all checked jobs";
+
     /// <summary>
     /// Gets or sets the callback invoked when the user requests to stop a job.
     /// </summary>
@@ -54,28 +62,31 @@ public class JobsView : FilterableTableView<Job>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(Job item)
+    protected override IReadOnlyList<ViewAction> GetAvailableActions(Job item)
     {
+        List<ViewAction> actions = [];
         if (OnStopJob is not null)
         {
-            yield return ("Stop job", "S", () => OnStopJob(item));
+            actions.Add(new ViewAction("Stop job", "S", ConsoleKey.S, default, () => OnStopJob(item)));
         }
 
         if (OnResumeJob is not null)
         {
-            yield return ("Resume job", "U", () => OnResumeJob(item));
+            actions.Add(new ViewAction("Resume job", "U", ConsoleKey.U, default, () => OnResumeJob(item)));
         }
 
-        var checkedCount = Checked.Count;
-        if (OnStopAll is not null && checkedCount > 1)
+        var checkedItems = Checked;
+        if (OnStopAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Stop {checkedCount} checked", null, () => OnStopAll(Checked));
+            actions.Add(new ViewAction($"Stop {checkedItems.Count} checked", null, null, default, () => OnStopAll(checkedItems)));
         }
 
-        if (OnResumeAll is not null && checkedCount > 1)
+        if (OnResumeAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Resume {checkedCount} checked", null, () => OnResumeAll(Checked));
+            actions.Add(new ViewAction($"Resume {checkedItems.Count} checked", null, null, default, () => OnResumeAll(checkedItems)));
         }
+
+        return actions;
     }
 
     /// <inheritdoc/>

@@ -34,6 +34,9 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
     protected override string DetailPanelHeader => "READ MODEL";
 
     /// <inheritdoc/>
+    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Mauve;
+
+    /// <inheritdoc/>
     public override IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
     {
         _windowSystem = windowSystem;

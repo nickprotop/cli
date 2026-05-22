@@ -13,6 +13,14 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
     /// <summary>Gets the currently selected failed partition, or <see langword="null"/> if none is selected.</summary>
     public FailedPartition? SelectedPartition => SelectedItem;
 
+    /// <inheritdoc/>
+    public override string ViewHelp =>
+        "Lists partitions that have failed during event processing.\n" +
+        "  [T]  Retry the selected partition (re-process from last failure)\n" +
+        "  [P]  Replay the selected partition from the beginning\n" +
+        "  [Space]  Check / uncheck row for bulk operations\n" +
+        "  [T] / [P]  (with 2+ checked) Bulk retry / replay all checked partitions";
+
     /// <summary>
     /// Gets or sets the callback invoked when the user requests a partition retry.
     /// </summary>
@@ -56,28 +64,31 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(FailedPartition item)
+    protected override IReadOnlyList<ViewAction> GetAvailableActions(FailedPartition item)
     {
+        List<ViewAction> actions = [];
         if (OnRetryPartition is not null)
         {
-            yield return ("Retry partition", "T", () => OnRetryPartition(item));
+            actions.Add(new ViewAction("Retry partition", "T", ConsoleKey.T, default, () => OnRetryPartition(item)));
         }
 
         if (OnReplayPartition is not null)
         {
-            yield return ("Replay partition", "P", () => OnReplayPartition(item));
+            actions.Add(new ViewAction("Replay partition", "P", ConsoleKey.P, default, () => OnReplayPartition(item)));
         }
 
-        var checkedCount = Checked.Count;
-        if (OnRetryAll is not null && checkedCount > 1)
+        var checkedItems = Checked;
+        if (OnRetryAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Retry {checkedCount} checked", null, () => OnRetryAll(Checked));
+            actions.Add(new ViewAction($"Retry {checkedItems.Count} checked", null, null, default, () => OnRetryAll(checkedItems)));
         }
 
-        if (OnReplayAll is not null && checkedCount > 1)
+        if (OnReplayAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Replay {checkedCount} checked", null, () => OnReplayAll(Checked));
+            actions.Add(new ViewAction($"Replay {checkedItems.Count} checked", null, null, default, () => OnReplayAll(checkedItems)));
         }
+
+        return actions;
     }
 
     /// <inheritdoc/>

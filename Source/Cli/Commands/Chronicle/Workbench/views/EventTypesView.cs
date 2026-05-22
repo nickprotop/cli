@@ -35,6 +35,9 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     /// <inheritdoc/>
     protected override string DetailPanelHeader => "EVENT TYPE";
 
+    /// <summary>Uses teal to match the EVENTS section color.</summary>
+    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Teal;
+
     /// <inheritdoc/>
     protected override int DefaultSortColumn => 0;
 
@@ -45,12 +48,15 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     protected override bool IsSortableColumn(int columnIndex) => columnIndex == 0;
 
     /// <inheritdoc/>
-    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(EventTypeRegistration item)
+    protected override IReadOnlyList<ViewAction> GetAvailableActions(EventTypeRegistration item)
     {
+        List<ViewAction> actions = [];
         if (OnViewObservers is not null)
         {
-            yield return ("View observers for this type", "V", () => OnViewObservers(item));
+            actions.Add(new ViewAction("View observers for this type", "V", ConsoleKey.V, default, () => OnViewObservers(item)));
         }
+
+        return actions;
     }
 
     /// <inheritdoc/>

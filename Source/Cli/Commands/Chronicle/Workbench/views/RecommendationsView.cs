@@ -13,6 +13,14 @@ public class RecommendationsView : FilterableTableView<Recommendation>
     /// <summary>Gets the currently selected recommendation, or <see langword="null"/> if none is selected.</summary>
     public Recommendation? SelectedRecommendation => SelectedItem;
 
+    /// <inheritdoc/>
+    public override string ViewHelp =>
+        "Lists pending recommendations suggested by Chronicle.\n" +
+        "  [A]  Apply the selected recommendation\n" +
+        "  [I]  Ignore the selected recommendation\n" +
+        "  [Space]  Check / uncheck row for bulk operations\n" +
+        "  [A] / [I]  (with 2+ checked) Bulk apply / ignore all checked";
+
     /// <summary>
     /// Gets or sets the callback invoked when the user applies a recommendation.
     /// </summary>
@@ -55,28 +63,31 @@ public class RecommendationsView : FilterableTableView<Recommendation>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(Recommendation item)
+    protected override IReadOnlyList<ViewAction> GetAvailableActions(Recommendation item)
     {
+        List<ViewAction> actions = [];
         if (OnApply is not null)
         {
-            yield return ("Apply recommendation", "A", () => OnApply(item));
+            actions.Add(new ViewAction("Apply recommendation", "A", ConsoleKey.A, default, () => OnApply(item)));
         }
 
         if (OnIgnore is not null)
         {
-            yield return ("Ignore recommendation", "I", () => OnIgnore(item));
+            actions.Add(new ViewAction("Ignore recommendation", "I", ConsoleKey.I, default, () => OnIgnore(item)));
         }
 
-        var checkedCount = Checked.Count;
-        if (OnApplyAll is not null && checkedCount > 1)
+        var checkedItems = Checked;
+        if (OnApplyAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Apply {checkedCount} checked", null, () => OnApplyAll(Checked));
+            actions.Add(new ViewAction($"Apply {checkedItems.Count} checked", null, null, default, () => OnApplyAll(checkedItems)));
         }
 
-        if (OnIgnoreAll is not null && checkedCount > 1)
+        if (OnIgnoreAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Ignore {checkedCount} checked", null, () => OnIgnoreAll(Checked));
+            actions.Add(new ViewAction($"Ignore {checkedItems.Count} checked", null, null, default, () => OnIgnoreAll(checkedItems)));
         }
+
+        return actions;
     }
 
     /// <inheritdoc/>

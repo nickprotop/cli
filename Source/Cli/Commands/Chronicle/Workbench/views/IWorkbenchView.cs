@@ -49,6 +49,41 @@ public interface IWorkbenchView : IDisposable
     string ViewHelp => string.Empty;
 
     /// <summary>
+    /// Gets the actions available for the currently selected row.
+    /// Consumed by the keyboard dispatcher, right-click context menu, and the Actions menu bar item.
+    /// Returns an empty list when no item is selected or the view has no actions.
+    /// </summary>
+    IReadOnlyList<ViewAction> ViewActions => [];
+
+    /// <summary>
+    /// Moves the selection one row toward the end of the table. No-op for views without a table.
+    /// </summary>
+    void MoveSelectionDown()
+    {
+    }
+
+    /// <summary>
+    /// Moves the selection one row toward the top of the table. No-op for views without a table.
+    /// </summary>
+    void MoveSelectionUp()
+    {
+    }
+
+    /// <summary>
+    /// Jumps the selection to the first row in the table. No-op for views without a table.
+    /// </summary>
+    void JumpToFirstRow()
+    {
+    }
+
+    /// <summary>
+    /// Jumps the selection to the last row in the table. No-op for views without a table.
+    /// </summary>
+    void JumpToLastRow()
+    {
+    }
+
+    /// <summary>
     /// Toggles the detail pane open or closed with an animation.
     /// Views without a detail pane may leave this as a no-op.
     /// </summary>
@@ -87,15 +122,19 @@ public interface IWorkbenchView : IDisposable
     }
 
     /// <summary>
-    /// Advances to the next page of results. No-op for views without pagination.
+    /// Applies the given filter string and rebuilds the table rows. No-op for views without a filter.
     /// </summary>
+    /// <param name="filter">The filter text to apply.</param>
+    void SetFilter(string filter)
+    {
+    }
+
+    /// <summary>Advances to the next page of results. No-op for views without pagination.</summary>
     void NextPage()
     {
     }
 
-    /// <summary>
-    /// Goes back to the previous page of results. No-op for views without pagination.
-    /// </summary>
+    /// <summary>Goes back to the previous page of results. No-op for views without pagination.</summary>
     void PreviousPage()
     {
     }

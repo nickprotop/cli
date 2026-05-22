@@ -41,6 +41,9 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     /// <inheritdoc/>
     protected override string DetailPanelHeader => "EVENT";
 
+    /// <summary>Uses teal to match the EVENTS section color.</summary>
+    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Teal;
+
     /// <inheritdoc/>
     protected override IEnumerable<AppendedEvent> GetItems(WorkbenchData data) => data.RecentEvents;
 
@@ -57,29 +60,30 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     ];
 
     /// <inheritdoc/>
-    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(AppendedEvent item)
+    protected override IReadOnlyList<ViewAction> GetAvailableActions(AppendedEvent item)
     {
+        List<ViewAction> actions = [];
         if (OnViewEventTypeDefinition is not null)
         {
-            yield return ("View event type definition", "D", () => OnViewEventTypeDefinition(item));
+            actions.Add(new ViewAction("View event type definition", "D", ConsoleKey.D, default, () => OnViewEventTypeDefinition(item)));
         }
 
         if (OnViewObserversForType is not null)
         {
-            yield return ("View observers for this type", "V", () => OnViewObserversForType(item));
+            actions.Add(new ViewAction("View observers for this type", "V", ConsoleKey.V, default, () => OnViewObserversForType(item)));
         }
+
+        return actions;
     }
 
     /// <inheritdoc/>
-    protected override string GetSortValue(AppendedEvent item, int columnIndex) => columnIndex switch
+    protected override IComparer<AppendedEvent> GetColumnComparer(int columnIndex) => columnIndex switch
     {
-        // Sort numerically (not by display string) by padding to a fixed width.
-        0 => item.Context.SequenceNumber.ToString("D20"),
-
-        // Sort chronologically using UTC ticks, not the relative-time display string.
-        1 => ((DateTimeOffset)item.Context.Occurred).UtcDateTime.Ticks.ToString("D20"),
-
-        _ => base.GetSortValue(item, columnIndex)
+        0 => Comparer<AppendedEvent>.Create((a, b) =>
+            a.Context.SequenceNumber.CompareTo(b.Context.SequenceNumber)),
+        1 => Comparer<AppendedEvent>.Create((a, b) =>
+            ((DateTimeOffset)a.Context.Occurred).CompareTo((DateTimeOffset)b.Context.Occurred)),
+        _ => base.GetColumnComparer(columnIndex)
     };
 
     /// <inheritdoc/>

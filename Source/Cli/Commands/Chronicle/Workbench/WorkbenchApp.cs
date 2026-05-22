@@ -2,7 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using SharpConsoleUI;
+using SharpConsoleUI.Configuration;
 using SharpConsoleUI.Drivers;
+using SharpConsoleUI.Panel;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -22,7 +24,13 @@ public class WorkbenchApp(WorkbenchDataService dataService, WorkbenchSettings se
     /// <returns>The exit code.</returns>
     public int Run()
     {
-        var windowSystem = new ConsoleWindowSystem(new NetConsoleDriver(RenderMode.Buffer));
+        var windowSystem = new ConsoleWindowSystem(
+            new NetConsoleDriver(RenderMode.Buffer),
+            options: new ConsoleWindowSystemOptions(
+                TopPanelConfig: panel => panel.Left(Elements.StatusText(string.Empty)),
+                BottomPanelConfig: panel => panel.Left(Elements.StatusText(WorkbenchHints.BottomBar))));
+
+        windowSystem.PanelStateService.TopStatus = "◆ CHRONICLE WORKBENCH";
 
         var mainWindow = new MainWindow(windowSystem, dataService, settings, services, initialData, state);
         windowSystem.AddWindow(mainWindow.Build(), activateWindow: true);

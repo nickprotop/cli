@@ -13,6 +13,13 @@ public class ObserversView : FilterableTableView<ObserverInformation>
     /// <summary>Gets the currently selected observer, or <see langword="null"/> if none is selected.</summary>
     public ObserverInformation? SelectedObserver => SelectedItem;
 
+    /// <inheritdoc/>
+    public override string ViewHelp =>
+        "Lists all registered observers and their current running state.\n" +
+        "  [R]  Replay the selected observer from the beginning\n" +
+        "  [Space]  Check / uncheck row for bulk operations\n" +
+        "  [R]  (with 2+ checked) Replay all checked observers";
+
     /// <summary>
     /// Gets or sets the callback invoked when the user requests a replay of the selected observer.
     /// </summary>
@@ -39,23 +46,36 @@ public class ObserversView : FilterableTableView<ObserverInformation>
     /// <inheritdoc/>
     protected override string DetailPanelHeader => "OBSERVER";
 
+    /// <summary>Uses the warning amber to match the OBSERVATION section color.</summary>
+    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Warning;
+
     /// <inheritdoc/>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IEnumerable<(string Label, string? Shortcut, Action Execute)> GetContextMenuActions(ObserverInformation item)
+    protected override IReadOnlyList<ViewAction> GetAvailableActions(ObserverInformation item)
     {
+        List<ViewAction> actions = [];
         if (OnReplay is not null)
         {
-            yield return ("Replay observer", "R", () => OnReplay(item));
+            actions.Add(new ViewAction("Replay observer", "R", ConsoleKey.R, default, () => OnReplay(item)));
         }
 
-        var checkedCount = Checked.Count;
-        if (OnReplayAll is not null && checkedCount > 1)
+        var checkedItems = Checked;
+        if (OnReplayAll is not null && checkedItems.Count > 1)
         {
-            yield return ($"Replay {checkedCount} checked", null, () => OnReplayAll(Checked));
+            actions.Add(new ViewAction($"Replay {checkedItems.Count} checked", null, null, default, () => OnReplayAll(checkedItems)));
         }
+
+        return actions;
     }
+
+    /// <inheritdoc/>
+    protected override IComparer<ObserverInformation> GetColumnComparer(int columnIndex) => columnIndex switch
+    {
+        0 => Comparer<ObserverInformation>.Create((a, b) => ObserverSortOrder(a).CompareTo(ObserverSortOrder(b))),
+        _ => base.GetColumnComparer(columnIndex)
+    };
 
     /// <inheritdoc/>
     protected override IEnumerable<ObserverInformation> GetItems(WorkbenchData data) =>

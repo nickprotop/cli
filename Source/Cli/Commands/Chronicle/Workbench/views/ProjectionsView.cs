@@ -21,6 +21,9 @@ public class ProjectionsView : FilterableTableView<ProjectionDefinition>
     protected override string DetailPanelHeader => "PROJECTION";
 
     /// <inheritdoc/>
+    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Mauve;
+
+    /// <inheritdoc/>
     protected override IEnumerable<ProjectionDefinition> GetItems(WorkbenchData data) =>
         data.ProjectionDefinitions.OrderBy(d => d.Identifier);
 
