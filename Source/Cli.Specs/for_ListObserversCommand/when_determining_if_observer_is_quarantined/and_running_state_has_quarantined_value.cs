@@ -11,7 +11,7 @@ public class and_running_state_has_quarantined_value : Specification
 
     void Because() => _isQuarantined = ListObserversCommand.IsQuarantined(new ObserverInformation
     {
-        RunningState = (ObserverRunningState)5
+        RunningState = ObserverRunningState.Quarantined
     });
 
     [Fact] void should_return_true() => _isQuarantined.ShouldBeTrue();
