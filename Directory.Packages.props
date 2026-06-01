@@ -7,12 +7,12 @@
     <!-- Cratis -->
     <PackageVersion Include="Cratis.Chronicle.Connections" Version="15.31.5" />
     <PackageVersion Include="Cratis.Chronicle.Contracts" Version="15.31.5" />
-    <PackageVersion Include="Cratis.Fundamentals" Version="7.10.5" />
+    <PackageVersion Include="Cratis.Fundamentals" Version="7.10.6" />
     <!-- CLI -->
     <PackageVersion Include="MongoDB.Driver" Version="3.9.0" />
     <PackageVersion Include="Spectre.Console" Version="0.55.2" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />
-    <PackageVersion Include="SharpConsoleUI" Version="2.4.63" />
+    <PackageVersion Include="SharpConsoleUI" Version="2.4.64" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.80.0" />
     <PackageVersion Include="System.Text.Json" Version="10.0.8" />
     <!-- Source Generator -->
