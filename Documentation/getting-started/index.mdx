@@ -29,7 +29,7 @@ Pick the install that matches your machine. However you do it, you end up with t
    brew install cratis
    ```
 
-   Upgrade later with `brew upgrade cratis`.
+   Upgrade later with a single `cratis update`.
    </TabItem>
    <TabItem label="Linux" icon="linux">
    Download the pre-built native binary from the [latest release](https://github.com/Cratis/cli/releases/latest) and put it on your `PATH`:
@@ -42,7 +42,7 @@ Pick the install that matches your machine. However you do it, you end up with t
    sudo mv cratis /usr/local/bin/cratis
    ```
 
-   To upgrade, repeat with the newer release.
+   To upgrade, repeat with the newer release — `cratis update` prints these exact steps whenever a newer version is out.
    </TabItem>
    <TabItem label=".NET tool" icon="seti:c-sharp">
    If you already have the [.NET SDK](https://dotnet.microsoft.com/download) (10 or newer), install it as a global tool — handy in CI and on Windows:
@@ -51,7 +51,7 @@ Pick the install that matches your machine. However you do it, you end up with t
    dotnet tool install -g Cratis.Cli
    ```
 
-   Upgrade with `dotnet tool update -g Cratis.Cli`.
+   Upgrade later with a single `cratis update`.
    </TabItem>
    </Tabs>
 
@@ -73,9 +73,36 @@ Pick the install that matches your machine. However you do it, you end up with t
 
 </Steps>
 
+## Keep it up to date
+
+The CLI moves quickly, and "how did I install this again?" is a question you shouldn't have to answer every time a release lands. You don't — the CLI updates itself:
+
+```bash title="Update to the latest version"
+cratis update
+```
+
+`cratis update` detects how this particular `cratis` got onto your machine and runs the right mechanism for it: on a Homebrew install it runs `brew update` followed by `brew upgrade cratis`; on a .NET tool install it runs `dotnet tool update -g Cratis.Cli`. Either way it ends by telling you exactly what happened:
+
+```text title="What you'll see"
+Updating Cratis CLI... (current: 1.2.0)
+Updated from 1.2.0 to 1.3.0
+```
+
+If you're already current, it says so — `Already at the latest version (1.3.0)` — so the command is always safe to run.
+
+Need a specific version rather than the latest? Pass `--version`:
+
+```bash title="Install a specific version"
+cratis update --version 1.2.3
+```
+
+<Aside type="note">
+`--version` works on .NET tool installs only — Homebrew can only move to the latest formula, and the CLI tells you so rather than guess. The Linux native binary can't replace itself either; there, `cratis update` prints the same download-and-replace steps from the install tab above so you don't have to go looking for them.
+</Aside>
+
 ## How `cratis` decides where to connect
 
-That worked with zero configuration, which is worth understanding rather than taking on faith. Every command needs one thing: a server to talk to. `cratis` resolves it by walking a short list of sources, top to bottom, and using the first one that's set:
+`cratis get-started` connected with zero configuration, which is worth understanding rather than taking on faith. Every command needs one thing: a server to talk to. `cratis` resolves it by walking a short list of sources, top to bottom, and using the first one that's set:
 
 ```mermaid
 flowchart TD
@@ -129,7 +156,7 @@ Refresh the embedded snapshot after a CLI upgrade with `cratis init --refresh`. 
 
 ## Recap
 
-In a couple of minutes you installed `cratis`, watched it find your local Chronicle through the `default` context, and confirmed the connection with `cratis get-started`. You also saw the one rule that governs every command — flag, then environment variable, then context, then the local default — so nothing about *where* it connects is a mystery anymore.
+In a couple of minutes you installed `cratis`, watched it find your local Chronicle through the `default` context, and confirmed the connection with `cratis get-started`. Staying current is one command — `cratis update` — no matter how the CLI was installed. You also saw the one rule that governs every command — flag, then environment variable, then context, then the local default — so nothing about *where* it connects is a mystery anymore.
 
 ## Where to go next
 
