@@ -5,12 +5,12 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- Cratis -->
-    <PackageVersion Include="Cratis.Chronicle.Connections" Version="15.34.5" />
-    <PackageVersion Include="Cratis.Chronicle.Contracts" Version="15.34.5" />
+    <PackageVersion Include="Cratis.Chronicle.Connections" Version="15.34.6" />
+    <PackageVersion Include="Cratis.Chronicle.Contracts" Version="15.34.6" />
     <PackageVersion Include="Cratis.Fundamentals" Version="7.16.0" />
     <!-- CLI -->
     <PackageVersion Include="MongoDB.Driver" Version="3.9.0" />
-    <PackageVersion Include="Spectre.Console" Version="0.56.0" />
+    <PackageVersion Include="Spectre.Console" Version="0.57.0" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.55.0" />
     <PackageVersion Include="SharpConsoleUI" Version="2.4.77" />
     <PackageVersion Include="Grpc.Net.Client" Version="2.80.0" />
@@ -30,7 +30,7 @@
     <!-- Testing -->
     <PackageVersion Include="Cratis.Specifications" Version="3.0.5" />
     <PackageVersion Include="Cratis.Specifications.XUnit" Version="3.0.5" />
-    <PackageVersion Include="Cratis.Chronicle.XUnit.Integration" Version="15.34.5" />
+    <PackageVersion Include="Cratis.Chronicle.XUnit.Integration" Version="15.34.6" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
