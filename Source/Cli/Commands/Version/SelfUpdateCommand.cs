@@ -23,6 +23,21 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
         var currentVersion = VersionCommand.GetCliVersion();
         var strategy = CliUpdate.DetectStrategy();
 
+        // Check for available updates before performing the update
+        var expectedNewVersion = settings.TargetVersion;
+        if (string.IsNullOrWhiteSpace(expectedNewVersion))
+        {
+            using var updateCheckCts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            try
+            {
+                expectedNewVersion = await UpdateChecker.CheckForUpdate(UpdateChecker.CliPackageId, currentVersion, updateCheckCts.Token);
+            }
+            catch
+            {
+                // If we can't check for updates, proceed anyway - the update tool will handle it
+            }
+        }
+
         if (string.Equals(format, OutputFormats.Table, StringComparison.Ordinal))
         {
             AnsiConsole.MarkupLine($"[bold]Updating Cratis CLI...[/] (current: {currentVersion.EscapeMarkup()})");
@@ -72,7 +87,10 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
             return updateResult.Value;
         }
 
-        var newVersion = VersionCommand.GetCliVersion();
+        // Use the expected new version instead of checking the currently running assembly
+        // The currently running process won't change version until it's restarted
+        var newVersion = expectedNewVersion ?? currentVersion;
+        var wasUpdated = !string.IsNullOrWhiteSpace(expectedNewVersion);
 
         if (string.Equals(format, OutputFormats.Json, StringComparison.Ordinal) || string.Equals(format, OutputFormats.JsonCompact, StringComparison.Ordinal))
         {
@@ -80,12 +98,13 @@ public class SelfUpdateCommand : AsyncCommand<SelfUpdateSettings>
             {
                 PreviousVersion = currentVersion,
                 CurrentVersion = newVersion,
-                Updated = currentVersion != newVersion
+                Updated = wasUpdated
             });
         }
-        else if (currentVersion != newVersion)
+        else if (wasUpdated)
         {
             AnsiConsole.MarkupLine($"[green]Updated from {currentVersion.EscapeMarkup()} to {newVersion.EscapeMarkup()}[/]");
+            AnsiConsole.MarkupLine("[dim]The new version will be active when you run 'cratis' again.[/]");
         }
         else
         {
