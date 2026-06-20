@@ -4,7 +4,6 @@
 using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
-using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -44,27 +43,34 @@ public class WorkbenchMenuBar(
                     state.Save();
                     Environment.Exit(0);
                 }))
-            .AddItem("Help", m => m
-                .AddItem("Keyboard Shortcuts", "?", () => overlays.OpenHelpOverlay())
-                .AddSeparator()
-                .AddItem("Theme: Modern Gray", "F9", () => ApplyTheme(new ModernGrayTheme()))
-                .AddItem("Theme: Classic", "F10", () => ApplyTheme(new ClassicTheme()))
-                .AddItem("Theme: Dev Dark", "F11", () => ApplyThemeByName("SharpConsoleUI.Plugins.DeveloperTools.DevDarkTheme, SharpConsoleUI")))
+            .AddItem("Help", BuildHelpMenu)
             .Build();
 
         menu.StickyPosition = StickyPosition.Top;
         return menu;
     }
 
-    void ApplyTheme(ITheme theme) =>
-        windowSystem.ThemeStateService.SetTheme(theme);
-
-    void ApplyThemeByName(string typeName)
+    void BuildHelpMenu(MenuItemBuilder help)
     {
-        var type = Type.GetType(typeName);
-        if (type is not null && Activator.CreateInstance(type) is ITheme theme)
+        help.AddItem("Keyboard Shortcuts", "?", overlays.OpenHelpOverlay)
+            .AddSeparator();
+
+        var slots = WorkbenchThemes.GetPrimarySlots(windowSystem);
+        string[] shortcuts = ["F9", "F10", "F11"];
+        for (var i = 0; i < slots.Count && i < shortcuts.Length; i++)
         {
-            ApplyTheme(theme);
+            var slot = slots[i];
+            help.AddItem($"Theme: {slot.Label}", shortcuts[i], slot.Apply);
+        }
+
+        help.AddItem("More Themes", BuildThemeSubmenu);
+    }
+
+    void BuildThemeSubmenu(MenuItemBuilder submenu)
+    {
+        foreach (var name in WorkbenchThemes.GetAvailableThemeNames(windowSystem))
+        {
+            submenu.AddItem(name, () => WorkbenchThemes.Apply(windowSystem, name));
         }
     }
 }

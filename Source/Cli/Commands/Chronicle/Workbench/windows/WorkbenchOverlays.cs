@@ -40,6 +40,8 @@ public class WorkbenchOverlays(
         var mut = WorkbenchColors.Muted.ToMarkup();
         var acc = WorkbenchColors.Accent.ToMarkup();
 
+        var themeLabels = string.Join(" / ", WorkbenchThemes.GetPrimarySlots(windowSystem).Select(s => s.Label));
+
         var activeIdx = navigation.CurrentViewIndex;
         var currentViewHelp = string.Empty;
         if (activeIdx >= 0 && activeIdx < views.Length && !string.IsNullOrEmpty(views[activeIdx].ViewHelp))
@@ -78,7 +80,7 @@ public class WorkbenchOverlays(
             $"  [{mut}]Ctrl+C[/]         Copy detail pane content to clipboard\n" +
             "\n" +
             $"[bold {acc}]THEMES[/]\n" +
-            $"  [{mut}]F9 / F10 / F11[/] Modern Gray / Classic / Dev Dark theme\n" +
+            $"  [{mut}]F9 / F10 / F11[/] {themeLabels} theme\n" +
             "\n" +
             $"[bold {acc}]GENERAL[/]\n" +
             $"  [{mut}]+  /  -[/]        Increase / decrease refresh interval\n" +

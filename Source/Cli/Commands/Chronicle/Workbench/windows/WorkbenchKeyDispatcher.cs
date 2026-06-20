@@ -3,7 +3,6 @@
 
 using SharpConsoleUI;
 using SharpConsoleUI.Controls;
-using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -142,17 +141,17 @@ public class WorkbenchKeyDispatcher(
 
             // Theme switching
             case ConsoleKey.F9:
-                ApplyTheme(new ModernGrayTheme());
+                ApplyThemeSlot(0);
                 e.Handled = true;
                 break;
 
             case ConsoleKey.F10:
-                ApplyTheme(new ClassicTheme());
+                ApplyThemeSlot(1);
                 e.Handled = true;
                 break;
 
             case ConsoleKey.F11:
-                ApplyThemeByName("SharpConsoleUI.Plugins.DeveloperTools.DevDarkTheme, SharpConsoleUI");
+                ApplyThemeSlot(2);
                 e.Handled = true;
                 break;
 
@@ -304,15 +303,12 @@ public class WorkbenchKeyDispatcher(
         return true;
     }
 
-    void ApplyTheme(ITheme theme) =>
-        windowSystem.ThemeStateService.SetTheme(theme);
-
-    void ApplyThemeByName(string typeName)
+    void ApplyThemeSlot(int index)
     {
-        var type = Type.GetType(typeName);
-        if (type is not null && Activator.CreateInstance(type) is ITheme theme)
+        var slots = WorkbenchThemes.GetPrimarySlots(windowSystem);
+        if (index >= 0 && index < slots.Count)
         {
-            ApplyTheme(theme);
+            slots[index].Apply();
         }
     }
 }
