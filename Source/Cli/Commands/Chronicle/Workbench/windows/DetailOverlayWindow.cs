@@ -39,6 +39,7 @@ public class DetailOverlayWindow
         IReadOnlyList<(string TabName, string Content)> tabs,
         IReadOnlyList<(string Label, Action Execute)> actions)
     {
+        var theme = new WorkbenchTheme(windowSystem);
         var tabBuilder = Controls.TabControl();
 
         foreach (var (tabName, content) in tabs)
@@ -50,9 +51,8 @@ public class DetailOverlayWindow
                 .AsReadOnly(true)
                 .WrapWords()
                 .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-                .WithSelectionColors(WorkbenchColors.Accent, WorkbenchColors.Background)
-                .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
-                .WithFocusedColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
+                .WithSelectionColors(theme.Accent, theme.Background)
+                .WithFocusedColors(theme.Foreground, theme.Background)
                 .Build();
 
             tabBuilder.AddTab(tabName, editor);
@@ -64,7 +64,7 @@ public class DetailOverlayWindow
         var toolbarBuilder = Controls.Toolbar()
             .WithBelowLine(false)
             .WithAboveLine(true)
-            .WithAboveLineColor(WorkbenchColors.Muted);
+            .WithAboveLineColor(theme.Muted);
 
         foreach (var (label, execute) in actions)
         {
@@ -75,7 +75,6 @@ public class DetailOverlayWindow
 
         _window = new WindowBuilder(windowSystem)
             .WithTitle(title)
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
             .Centered()
             .WithSize(120, 35)
             .AddControl(tabControl)

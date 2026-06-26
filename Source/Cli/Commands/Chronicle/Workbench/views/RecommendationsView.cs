@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -57,34 +58,88 @@ public class RecommendationsView : FilterableTableView<Recommendation>
     protected override string DetailPanelHeader => "RECOMMENDATION";
 
     /// <inheritdoc/>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Warning;
+    protected override ColorRole DetailColorRole => ColorRole.Warning;
 
     /// <inheritdoc/>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IReadOnlyList<ViewAction> GetAvailableActions(Recommendation item)
+    protected override string? PageTitle => "RECOMMENDATIONS";
+
+    /// <inheritdoc/>
+    protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];
         if (OnApply is not null)
         {
-            actions.Add(new ViewAction("Apply recommendation", "A", ConsoleKey.A, default, () => OnApply(item)));
+            actions.Add(new ViewAction(
+                "Apply recommendation",
+                "A",
+                ConsoleKey.A,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnApply(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
         if (OnIgnore is not null)
         {
-            actions.Add(new ViewAction("Ignore recommendation", "I", ConsoleKey.I, default, () => OnIgnore(item)));
+            actions.Add(new ViewAction(
+                "Ignore recommendation",
+                "I",
+                ConsoleKey.I,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnIgnore(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
-        var checkedItems = Checked;
-        if (OnApplyAll is not null && checkedItems.Count > 1)
+        if (OnApplyAll is not null)
         {
-            actions.Add(new ViewAction($"Apply {checkedItems.Count} checked", null, null, default, () => OnApplyAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Apply {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnApplyAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
-        if (OnIgnoreAll is not null && checkedItems.Count > 1)
+        if (OnIgnoreAll is not null)
         {
-            actions.Add(new ViewAction($"Ignore {checkedItems.Count} checked", null, null, default, () => OnIgnoreAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Ignore {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnIgnoreAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
         return actions;
@@ -105,10 +160,10 @@ public class RecommendationsView : FilterableTableView<Recommendation>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a recommendation.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select a recommendation.[/]";
         }
 
-        var mut = WorkbenchColors.Muted.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
 
         var lines = new List<string>
         {

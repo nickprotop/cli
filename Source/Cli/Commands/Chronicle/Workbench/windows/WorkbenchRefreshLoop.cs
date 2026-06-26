@@ -15,6 +15,7 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <param name="windowSystem">The window system — used to write to the top panel.</param>
 /// <param name="getActiveEventStore">Returns the currently active event store name, or <see langword="null"/> for the default.</param>
 /// <param name="getActiveNamespace">Returns the currently active namespace name, or <see langword="null"/> for the default.</param>
+/// <param name="statusBar">The bottom status bar — updated on every data tick. May be <see langword="null"/> if not yet built.</param>
 public class WorkbenchRefreshLoop(
     WorkbenchDataService dataService,
     WorkbenchSettings settings,
@@ -22,7 +23,8 @@ public class WorkbenchRefreshLoop(
     WorkbenchNavigation navigation,
     ConsoleWindowSystem windowSystem,
     Func<string?> getActiveEventStore,
-    Func<string?> getActiveNamespace)
+    Func<string?> getActiveNamespace,
+    WorkbenchStatusBar? statusBar = null)
 {
     readonly object _dataLock = new();
     WorkbenchData? _currentData;
@@ -57,6 +59,7 @@ public class WorkbenchRefreshLoop(
 
         PushDataToViews(data);
         UpdateTopPanel(data);
+        UpdateStatusBar(data);
         navigation.UpdateNavBadges(data);
     }
 
@@ -123,6 +126,7 @@ public class WorkbenchRefreshLoop(
             _wasDisconnected = !data.IsConnected;
 
             UpdateTopPanel(data);
+            UpdateStatusBar(data);
             navigation.UpdateNavBadges(data);
         }
         catch (OperationCanceledException)
@@ -165,6 +169,23 @@ public class WorkbenchRefreshLoop(
 
         windowSystem.PanelStateService.TopStatus =
             $"◆ CHRONICLE WORKBENCH  ·  {host}  ·  {eventStore}/{ns}  ·  ↻{settings.Interval}s{seqText}  {connDot}";
+    }
+
+    /// <summary>
+    /// Updates the bottom status bar's live items from the latest snapshot and settings.
+    /// Falls back to <see cref="CurrentData"/> when <paramref name="data"/> is <see langword="null"/>,
+    /// so callers (e.g. an interval change) can refresh the bar between data ticks.
+    /// </summary>
+    /// <param name="data">Optional snapshot to use; falls back to <see cref="CurrentData"/> when omitted.</param>
+    public void UpdateStatusBar(WorkbenchData? data = null)
+    {
+        data ??= CurrentData;
+        if (data is null)
+        {
+            return;
+        }
+
+        statusBar?.Update(data, settings, getActiveEventStore, getActiveNamespace);
     }
 
     static string ExtractHostFromConnectionString(string connectionString)

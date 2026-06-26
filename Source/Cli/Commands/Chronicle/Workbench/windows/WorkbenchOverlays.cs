@@ -5,6 +5,8 @@ using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
 using SharpConsoleUI.Helpers;
+using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 using UITableRow = SharpConsoleUI.Controls.TableRow;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
@@ -27,9 +29,43 @@ public class WorkbenchOverlays(
 {
     const int HelpOverlayWidth = 72;
     const int HelpOverlayHeight = 40;
-    const int CommandPaletteWidth = 80;
-    const int CommandPaletteHeight = 18;
-    const int MaxCommandPaletteResults = 10;
+
+    readonly WorkbenchTheme _theme = new(windowSystem);
+
+    Window? _mainWindow;
+    WorkbenchCommandPalette? _palettePortal;
+    LayoutNode? _palettePortalNode;
+
+    /// <summary>
+    /// Registers the main <see cref="Window"/> so the command palette can use
+    /// <see cref="Window.CreatePortal"/> and <see cref="Window.RemovePortal"/>, and hooks
+    /// <see cref="Window.PreviewKeyPressed"/> to forward all keys to the palette while it is open.
+    /// Must be called once from <see cref="MainWindow"/> immediately after the window is built.
+    /// </summary>
+    /// <param name="window">The main application window.</param>
+    public void SetWindow(Window window)
+    {
+        _mainWindow = window;
+
+        window.PreviewKeyPressed += (_, e) =>
+        {
+            if (_palettePortal is not null)
+            {
+                // Ctrl+P toggles the palette closed while it is open. The palette swallows all other
+                // keys, so this toggle must be handled here before delegating to the palette.
+                if (e.KeyInfo.Key == ConsoleKey.P && e.KeyInfo.Modifiers.HasFlag(ConsoleModifiers.Control))
+                {
+                    DismissPalette();
+                }
+                else
+                {
+                    _palettePortal.ProcessKey(e.KeyInfo);
+                }
+
+                e.Handled = true;
+            }
+        };
+    }
 
     /// <summary>
     /// Opens the keyboard-shortcuts help overlay. Shows a view-specific section at the top when the active
@@ -37,8 +73,8 @@ public class WorkbenchOverlays(
     /// </summary>
     public void OpenHelpOverlay()
     {
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var acc = WorkbenchColors.Accent.ToMarkup();
+        var mut = _theme.Muted.ToMarkup();
+        var acc = _theme.Accent.ToMarkup();
 
         var themeLabels = string.Join(" / ", WorkbenchThemes.GetPrimarySlots(windowSystem).Select(s => s.Label));
 
@@ -97,7 +133,6 @@ public class WorkbenchOverlays(
         Window? helpWindow = null;
         helpWindow = new WindowBuilder(windowSystem)
             .WithTitle(" Keyboard Shortcuts ")
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
             .WithSize(HelpOverlayWidth, HelpOverlayHeight)
             .Centered()
             .AddControl(content)
@@ -118,149 +153,48 @@ public class WorkbenchOverlays(
 
     /// <summary>
     /// Opens the command palette overlay for searching observers, event types, projections, read models, and failures.
+    /// Calling when the palette is already open toggles it closed (Ctrl+P again dismisses).
     /// </summary>
     public void OpenCommandPalette()
     {
+        // Toggle: dismiss if already open.
+        if (_palettePortal is not null)
+        {
+            DismissPalette();
+            return;
+        }
+
         var snapshot = refreshLoop.CurrentData;
-        if (snapshot is null)
+        if (snapshot is null || _mainWindow is null || navigation.NavView is null)
         {
             return;
         }
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
+        var matches = BuildPaletteItems(snapshot);
 
-        var resultsTable = Controls.Table()
-            .AddColumn("Kind", SharpConsoleUI.Layout.TextJustification.Left, 20)
-            .AddColumn("Name", SharpConsoleUI.Layout.TextJustification.Left, null)
-            .Interactive()
-            .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .WithName("CommandPaletteResults")
-            .Build();
-
-        var searchPrompt = Controls.Prompt($"[{acc}]>[/] ")
-            .WithName("CommandPaletteSearch")
-            .OnGotFocus((_, _) => actionHandler.TextInputFocused = true)
-            .OnLostFocus((_, _) => actionHandler.TextInputFocused = false)
-            .Build();
-
-        void PopulateResults(string query)
+        var palette = new WorkbenchCommandPalette(matches, _theme, _mainWindow.Width, _mainWindow.Height)
         {
-            resultsTable.ClearRows();
+            Container = _mainWindow
+        };
 
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                return;
-            }
+        _palettePortal = palette;
+        _palettePortalNode = _mainWindow.CreatePortal(navigation.NavView, palette);
 
-            var matches = new List<(string Kind, string Label, Action Navigate)>();
+        // Suppress global shortcuts while the palette search prompt has focus.
+        actionHandler.TextInputFocused = true;
 
-            foreach (var obs in snapshot.Observers)
-            {
-                if (obs.Id.Contains(query, StringComparison.OrdinalIgnoreCase))
-                {
-                    var obsId = obs.Id;
-                    matches.Add(("Observer", $"{obs.Id} [{obs.RunningState}]", () =>
-                    {
-                        navigation.NavigateTo(WorkbenchNavigation.IndexObservers);
-                        NavigateAndFilter(WorkbenchNavigation.IndexObservers, obsId);
-                    }));
-                }
-            }
+        palette.CommandChosen += (_, navigateAction) =>
+        {
+            DismissPalette();
+            navigateAction?.Invoke();
+        };
 
-            foreach (var et in snapshot.EventTypeRegistrations)
-            {
-                if (et.Type.Id.Contains(query, StringComparison.OrdinalIgnoreCase))
-                {
-                    var typeId = et.Type.Id;
-                    matches.Add(("Event Type", $"{et.Type.Id} gen {et.Type.Generation}", () =>
-                    {
-                        navigation.NavigateTo(WorkbenchNavigation.IndexEventTypes);
-                        NavigateAndFilter(WorkbenchNavigation.IndexEventTypes, typeId);
-                    }));
-                }
-            }
+        // EscapeRequested: user pressed Esc inside the palette.
+        palette.EscapeRequested += (_, _) => DismissPalette();
 
-            foreach (var pd in snapshot.ProjectionDefinitions)
-            {
-                if (pd.Identifier.Contains(query, StringComparison.OrdinalIgnoreCase))
-                {
-                    var id = pd.Identifier;
-                    matches.Add(("Projection", pd.Identifier, () =>
-                    {
-                        navigation.NavigateTo(WorkbenchNavigation.IndexProjections);
-                        NavigateAndFilter(WorkbenchNavigation.IndexProjections, id);
-                    }));
-                }
-            }
-
-            foreach (var rm in snapshot.ReadModelDefinitions)
-            {
-                if (rm.ContainerName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    rm.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase))
-                {
-                    var label = rm.DisplayName.Length > 0 ? rm.DisplayName : rm.ContainerName;
-                    matches.Add(("Read Model", label, () =>
-                    {
-                        navigation.NavigateTo(WorkbenchNavigation.IndexReadModels);
-                        NavigateAndFilter(WorkbenchNavigation.IndexReadModels, label);
-                    }));
-                }
-            }
-
-            foreach (var fp in snapshot.FailedPartitions)
-            {
-                if (fp.ObserverId.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                    fp.Partition.Contains(query, StringComparison.OrdinalIgnoreCase))
-                {
-                    var obsId = fp.ObserverId;
-                    matches.Add(("Failure", $"{fp.ObserverId}/{fp.Partition}", () =>
-                    {
-                        navigation.NavigateTo(WorkbenchNavigation.IndexFailures);
-                        NavigateAndFilter(WorkbenchNavigation.IndexFailures, obsId);
-                    }));
-                }
-            }
-
-            foreach (var (kind, label, navigate) in matches.Take(MaxCommandPaletteResults))
-            {
-                resultsTable.AddRow(new UITableRow([kind, label]) { Tag = navigate });
-            }
-        }
-
-        searchPrompt.InputChanged += (_, text) => PopulateResults(text ?? string.Empty);
-
-        Window? paletteWindow = null;
-        paletteWindow = new WindowBuilder(windowSystem)
-            .WithTitle(" Command Palette ")
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
-            .WithSize(CommandPaletteWidth, CommandPaletteHeight)
-            .Centered()
-            .AddControl(searchPrompt)
-            .AddControl(resultsTable)
-            .OnKeyPressed((_, e) =>
-            {
-                if (e.KeyInfo.Key == ConsoleKey.Escape)
-                {
-                    windowSystem.CloseWindow(paletteWindow, activateParent: true, force: false);
-                    e.Handled = true;
-                    return;
-                }
-
-                if (e.KeyInfo.Key == ConsoleKey.Enter)
-                {
-                    var selectedRow = resultsTable.SelectedRow;
-                    if (selectedRow?.Tag is Action navigate)
-                    {
-                        windowSystem.CloseWindow(paletteWindow, activateParent: true, force: false);
-                        navigate();
-                    }
-
-                    e.Handled = true;
-                }
-            })
-            .Build();
-
-        windowSystem.AddWindow(paletteWindow, activateWindow: true);
+        // DismissRequested: framework-initiated dismissal (outside-click, debounce) via the base
+        // PortalContentBase.DismissRequested event. Both paths must clean up the portal refs.
+        palette.DismissRequested += (_, _) => DismissPalette();
     }
 
     /// <summary>
@@ -311,9 +245,9 @@ public class WorkbenchOverlays(
         IReadOnlyList<ObserverInformation> matchingObservers,
         Action<ObserverInformation> navigateToObserver)
     {
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var warn = WorkbenchColors.Warning.ToMarkup();
+        var mut = _theme.Muted.ToMarkup();
+        var acc = _theme.Accent.ToMarkup();
+        var warn = _theme.Warning.ToMarkup();
 
         var table = Controls.Table()
             .AddColumn("State", SharpConsoleUI.Layout.TextJustification.Left, 18)
@@ -328,7 +262,7 @@ public class WorkbenchOverlays(
             .WithContent($"[{mut}]Select an observer.[/]")
             .WithHeader(" OBSERVER ")
             .Rounded()
-            .WithBorderColor(WorkbenchColors.Warning)
+            .WithColorRole(ColorRole.Warning)
             .WithPadding(1, 0, 1, 0)
             .FillVertical()
             .WithName("ObserversForEventTypeDetail")
@@ -373,7 +307,6 @@ public class WorkbenchOverlays(
         Window? overlayWindow = null;
         overlayWindow = new WindowBuilder(windowSystem)
             .WithTitle($" Observers for {eventTypeId} ")
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
             .WithSize(width, height)
             .Centered()
             .AddControl(layout)
@@ -407,9 +340,9 @@ public class WorkbenchOverlays(
     /// <param name="snapshot">The current data snapshot used to locate the registration.</param>
     public void OpenEventTypeDefinition(string eventTypeId, WorkbenchData? snapshot)
     {
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var teal = WorkbenchColors.Teal.ToMarkup();
+        var mut = _theme.Muted.ToMarkup();
+        var acc = _theme.Accent.ToMarkup();
+        var teal = _theme.Teal.ToMarkup();
 
         EventTypeRegistration? reg = null;
         if (snapshot is not null)
@@ -456,7 +389,6 @@ public class WorkbenchOverlays(
         Window? defWindow = null;
         defWindow = new WindowBuilder(windowSystem)
             .WithTitle($" Event Type: {eventTypeId} ")
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
             .WithSize(width, height)
             .Centered()
             .AddControl(scrollable)
@@ -473,7 +405,32 @@ public class WorkbenchOverlays(
         windowSystem.AddWindow(defWindow, activateWindow: true);
     }
 
-    static string RenderObserverDetail(ObserverInformation obs, string mut, string acc, string warn)
+    static int ObserverSortOrder(ObserverInformation o) => o.RunningState switch
+    {
+        ObserverRunningState.Disconnected => 0,
+        ObserverRunningState.Replaying => 1,
+        ObserverRunningState.Active => 2,
+        ObserverRunningState.Suspended => 3,
+        _ => 4
+    };
+
+    static string ObserverIcon(ObserverInformation obs) => obs.RunningState switch
+    {
+        ObserverRunningState.Active => "●",
+        ObserverRunningState.Replaying => "▲",
+        ObserverRunningState.Disconnected => "⊘",
+        _ => "○"
+    };
+
+    string ObserverStateColor(ObserverInformation obs) => obs.RunningState switch
+    {
+        ObserverRunningState.Active => _theme.Success.ToMarkup(),
+        ObserverRunningState.Replaying => _theme.Warning.ToMarkup(),
+        ObserverRunningState.Disconnected => _theme.Danger.ToMarkup(),
+        _ => _theme.Muted.ToMarkup()
+    };
+
+    string RenderObserverDetail(ObserverInformation obs, string mut, string acc, string warn)
     {
         var color = ObserverStateColor(obs);
         var lastSeq = obs.LastHandledEventSequenceNumber == ulong.MaxValue
@@ -502,30 +459,93 @@ public class WorkbenchOverlays(
         return string.Join('\n', lines);
     }
 
-    static int ObserverSortOrder(ObserverInformation o) => o.RunningState switch
+    /// <summary>
+    /// Dismisses the command palette portal if one is currently open. Safe to call more than
+    /// once — subsequent calls are no-ops once the portal refs have been cleared.
+    /// </summary>
+    void DismissPalette()
     {
-        ObserverRunningState.Disconnected => 0,
-        ObserverRunningState.Replaying => 1,
-        ObserverRunningState.Active => 2,
-        ObserverRunningState.Suspended => 3,
-        _ => 4
-    };
+        if (_palettePortalNode is null)
+        {
+            return;
+        }
 
-    static string ObserverStateColor(ObserverInformation obs) => obs.RunningState switch
-    {
-        ObserverRunningState.Active => WorkbenchColors.Success.ToMarkup(),
-        ObserverRunningState.Replaying => WorkbenchColors.Warning.ToMarkup(),
-        ObserverRunningState.Disconnected => WorkbenchColors.Danger.ToMarkup(),
-        _ => WorkbenchColors.Muted.ToMarkup()
-    };
+        if (_mainWindow is not null && navigation.NavView is not null)
+        {
+            _mainWindow.RemovePortal(navigation.NavView, _palettePortalNode);
+        }
 
-    static string ObserverIcon(ObserverInformation obs) => obs.RunningState switch
+        _palettePortal = null;
+        _palettePortalNode = null;
+
+        // Restore normal shortcut dispatch now that the palette prompt is gone.
+        actionHandler.TextInputFocused = false;
+    }
+
+    /// <summary>
+    /// Builds the full set of palette items from the current data snapshot. Items are produced for
+    /// Observers, Event Types, Projections, Read Models, and Failed Partitions. No cap is applied
+    /// here — the palette's <c>PopulateList</c> applies a display cap to the filtered results so
+    /// that items beyond the first N raw entries are still reachable by typing a more specific query.
+    /// </summary>
+    /// <param name="snapshot">The current workbench data snapshot.</param>
+    /// <returns>All candidate palette items.</returns>
+    List<(string Kind, string Label, string SearchKey, Action Navigate)> BuildPaletteItems(WorkbenchData snapshot)
     {
-        ObserverRunningState.Active => "●",
-        ObserverRunningState.Replaying => "▲",
-        ObserverRunningState.Disconnected => "⊘",
-        _ => "○"
-    };
+        var matches = new List<(string Kind, string Label, string SearchKey, Action Navigate)>();
+
+        foreach (var obs in snapshot.Observers)
+        {
+            var obsId = obs.Id;
+            matches.Add(("Observer", $"{obs.Id} [{obs.RunningState}]", obs.Id, () =>
+            {
+                navigation.NavigateTo(WorkbenchNavigation.IndexObservers);
+                NavigateAndFilter(WorkbenchNavigation.IndexObservers, obsId);
+            }));
+        }
+
+        foreach (var et in snapshot.EventTypeRegistrations)
+        {
+            var typeId = et.Type.Id;
+            matches.Add(("Event Type", $"{et.Type.Id} gen {et.Type.Generation}", et.Type.Id, () =>
+            {
+                navigation.NavigateTo(WorkbenchNavigation.IndexEventTypes);
+                NavigateAndFilter(WorkbenchNavigation.IndexEventTypes, typeId);
+            }));
+        }
+
+        foreach (var pd in snapshot.ProjectionDefinitions)
+        {
+            var id = pd.Identifier;
+            matches.Add(("Projection", pd.Identifier, pd.Identifier, () =>
+            {
+                navigation.NavigateTo(WorkbenchNavigation.IndexProjections);
+                NavigateAndFilter(WorkbenchNavigation.IndexProjections, id);
+            }));
+        }
+
+        foreach (var rm in snapshot.ReadModelDefinitions)
+        {
+            var label = rm.DisplayName.Length > 0 ? rm.DisplayName : rm.ContainerName;
+            matches.Add(("Read Model", label, $"{rm.ContainerName} {rm.DisplayName}", () =>
+            {
+                navigation.NavigateTo(WorkbenchNavigation.IndexReadModels);
+                NavigateAndFilter(WorkbenchNavigation.IndexReadModels, label);
+            }));
+        }
+
+        foreach (var fp in snapshot.FailedPartitions)
+        {
+            var obsId = fp.ObserverId;
+            matches.Add(("Failure", $"{fp.ObserverId}/{fp.Partition}", $"{fp.ObserverId} {fp.Partition}", () =>
+            {
+                navigation.NavigateTo(WorkbenchNavigation.IndexFailures);
+                NavigateAndFilter(WorkbenchNavigation.IndexFailures, obsId);
+            }));
+        }
+
+        return matches;
+    }
 
     void NavigateAndFilter(int viewIndex, string filter)
     {

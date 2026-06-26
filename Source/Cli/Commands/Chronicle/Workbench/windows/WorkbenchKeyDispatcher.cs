@@ -28,6 +28,7 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <param name="settings">Workbench settings — used by the Quit action to persist the refresh interval.</param>
 /// <param name="state">Workbench state — used by the Quit action to persist the last active navigation index.</param>
 /// <param name="getWindow">Returns the main <see cref="Window"/>, used for focus control targeting.</param>
+/// <param name="onIntervalChanged">Invoked after the refresh interval changes so the status bar can refresh immediately.</param>
 public class WorkbenchKeyDispatcher(
     WorkbenchNavigation navigation,
     IWorkbenchView[] views,
@@ -36,8 +37,12 @@ public class WorkbenchKeyDispatcher(
     WorkbenchOverlays overlays,
     WorkbenchSettings settings,
     WorkbenchState state,
-    Func<Window?> getWindow)
+    Func<Window?> getWindow,
+    Action onIntervalChanged)
 {
+    const int MinInterval = 1;
+    const int MaxInterval = 60;
+
     bool _sidebarExpanded = true;
 
     /// <summary>
@@ -153,6 +158,28 @@ public class WorkbenchKeyDispatcher(
             case ConsoleKey.F11:
                 ApplyThemeSlot(2);
                 e.Handled = true;
+                break;
+
+            // Refresh interval — OemPlus/Add increase, OemMinus/Subtract decrease (clamped).
+            // OemPlus is the '=' / '+' key (terminals report '+' as Shift+OemPlus → OemPlus here).
+            case ConsoleKey.OemPlus:
+            case ConsoleKey.Add:
+                if (!e.AlreadyHandled)
+                {
+                    AdjustInterval(+1);
+                    e.Handled = true;
+                }
+
+                break;
+
+            case ConsoleKey.OemMinus:
+            case ConsoleKey.Subtract:
+                if (!e.AlreadyHandled)
+                {
+                    AdjustInterval(-1);
+                    e.Handled = true;
+                }
+
                 break;
 
             // Page navigation
@@ -271,6 +298,24 @@ public class WorkbenchKeyDispatcher(
         }
     }
 
+    /// <summary>
+    /// Adjusts the refresh interval by <paramref name="delta"/> seconds, clamped to
+    /// <see cref="MinInterval"/>..<see cref="MaxInterval"/>, and refreshes the status bar immediately.
+    /// The refresh loop re-reads the interval on its next delay, so the new cadence applies from there.
+    /// </summary>
+    /// <param name="delta">The amount to add to the current interval in seconds. Positive values increase the interval (slower refresh); negative values decrease it (faster refresh).</param>
+    void AdjustInterval(int delta)
+    {
+        var updated = Math.Clamp(settings.Interval + delta, MinInterval, MaxInterval);
+        if (updated == settings.Interval)
+        {
+            return;
+        }
+
+        settings.Interval = updated;
+        onIntervalChanged();
+    }
+
     void ActivateCurrentFilter()
     {
         var idx = navigation.CurrentViewIndex;
@@ -292,7 +337,7 @@ public class WorkbenchKeyDispatcher(
         }
 
         var match = views[idx].ViewActions.FirstOrDefault(
-            a => a.TriggerKey == key && a.TriggerModifiers == modifiers);
+            a => a.TriggerKey == key && a.TriggerModifiers == modifiers && a.Enabled);
 
         if (match is null)
         {

@@ -4,6 +4,7 @@
 using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -15,31 +16,42 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 public class WorkbenchActionHandler(ConsoleWindowSystem windowSystem, Action<string> updateStatus)
 {
     /// <summary>
+    /// Maximum number of affected items listed individually in the danger modal before collapsing
+    /// the remainder into a "+K more" line.
+    /// </summary>
+    const int MaxAffectedListed = 8;
+
+    readonly WorkbenchTheme _theme = new(windowSystem);
+
+    /// <summary>
     /// Gets or sets a value indicating whether a text input control currently has keyboard focus.
     /// When <see langword="true"/>, most shortcut keys are suppressed so the user can type freely.
     /// </summary>
     public bool TextInputFocused { get; set; }
 
     /// <summary>
-    /// Opens a centered confirmation dialog for <paramref name="description"/>.
-    /// Executes <paramref name="action"/> when the user confirms; dismisses on cancel.
+    /// Opens the danger-confirmation modal for a single-target <paramref name="description"/>.
+    /// Executes <paramref name="action"/> when the user confirms (explicit Y); dismisses on cancel.
     /// </summary>
     /// <param name="description">Short human-readable description of the action.</param>
     /// <param name="action">Async delegate that performs the action when confirmed.</param>
     public void ExecuteAction(string description, Func<Task> action) =>
-        ShowConfirmationDialog(description, action);
+        ConfirmDanger(description, [], action);
 
     /// <summary>
-    /// Opens a confirmation dialog for a bulk operation over <paramref name="items"/>.
-    /// Calls <paramref name="perItem"/> for each item in sequence when confirmed.
+    /// Opens a danger-confirmation dialog for a bulk operation over <paramref name="items"/>.
+    /// Calls <paramref name="perItem"/> for each item in sequence when confirmed. The modal lists the
+    /// affected items (capped, then "+K more") when a <paramref name="labelFor"/> selector is supplied.
     /// </summary>
     /// <typeparam name="T">The element type.</typeparam>
     /// <param name="description">Short human-readable description of the bulk action.</param>
     /// <param name="items">The collection of items to act on.</param>
     /// <param name="perItem">Async delegate called once per item.</param>
-    public void ConfirmThenExecuteAll<T>(string description, IReadOnlyList<T> items, Func<T, Task> perItem)
+    /// <param name="labelFor">Optional selector rendering each item for the affected list. When null, no list is shown.</param>
+    public void ConfirmThenExecuteAll<T>(string description, IReadOnlyList<T> items, Func<T, Task> perItem, Func<T, string>? labelFor = null)
     {
-        ExecuteAction(description, async () =>
+        List<string> affected = labelFor is null ? [] : [.. items.Select(labelFor)];
+        ConfirmDanger(description, affected, async () =>
         {
             foreach (var item in items)
             {
@@ -48,40 +60,72 @@ public class WorkbenchActionHandler(ConsoleWindowSystem windowSystem, Action<str
         });
     }
 
-    void ShowConfirmationDialog(string description, Func<Task> action)
+    /// <summary>
+    /// Shows the danger-confirmation modal: a <see cref="ColorRole.Danger"/>-bordered, content-sized
+    /// window with a warning title, the action message, an optional affected-item list, and a
+    /// Cancel-focused key contract (Enter / Escape / N cancel; only an explicit Y confirms) so a
+    /// reflexive Enter never triggers the destructive action.
+    /// </summary>
+    /// <param name="description">The action message.</param>
+    /// <param name="affected">Affected-item labels to list (capped at <see cref="MaxAffectedListed"/>); empty for single-target actions.</param>
+    /// <param name="action">Async delegate that performs the action when confirmed.</param>
+    void ConfirmDanger(string description, List<string> affected, Func<Task> action)
     {
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var warn = WorkbenchColors.Warning.ToMarkup();
-        var acc = WorkbenchColors.Accent.ToMarkup();
+        var mut = _theme.Muted.ToMarkup();
+        var dan = _theme.Danger.ToMarkup();
+        var acc = _theme.Accent.ToMarkup();
 
-        var body = Controls.Markup()
+        var markup = Controls.Markup()
             .AddEmptyLine()
-            .AddLine($"  [{warn}]⚡[/]  {description}")
-            .AddEmptyLine()
+            .AddLine($"  [{dan}]⚠[/]  {description}")
+            .AddEmptyLine();
+
+        if (affected.Count > 0)
+        {
+            markup.AddLine($"  [{mut}]Affected:[/]");
+            foreach (var label in affected.Take(MaxAffectedListed))
+            {
+                markup.AddLine($"    [{mut}]•[/] {label}");
+            }
+
+            if (affected.Count > MaxAffectedListed)
+            {
+                markup.AddLine($"    [{mut}]+{affected.Count - MaxAffectedListed} more[/]");
+            }
+
+            markup.AddEmptyLine();
+        }
+
+        var body = markup
             .AddLine($"  [{mut}]This action cannot be undone.[/]")
             .AddEmptyLine()
-            .AddLine($"  [{mut}]Press[/] [bold {acc}]Enter[/] [{mut}]or[/] [bold {acc}]Y[/] [{mut}]to confirm, or[/] [bold {acc}]Escape[/] [{mut}]/ [bold {acc}]N[/] [{mut}]to cancel.[/]")
+            .AddLine($"  [bold {acc}]Y[/] [{mut}]confirm[/]   [bold {acc}]Esc[/] [{mut}]/[/] [bold {acc}]Enter[/] [{mut}]cancel[/]")
             .AddEmptyLine()
             .Build();
 
+        // Content-sized height: chrome (border + title + padding) plus body lines.
+        var listLines = affected.Count == 0 ? 0 : Math.Min(affected.Count, MaxAffectedListed) + (affected.Count > MaxAffectedListed ? 1 : 0) + 2;
+        var height = 9 + listLines;
+
         Window? dialog = null;
         dialog = new WindowBuilder(windowSystem)
-            .WithTitle(" Confirm Action ")
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Surface)
-            .WithSize(64, 10)
+            .WithTitle(" ⚠ Confirm ")
+            .WithSize(64, height)
             .Centered()
+            .WithActiveBorderColor(_theme.Danger)
             .AddControl(body)
             .OnKeyPressed((_, e) =>
             {
                 switch (e.KeyInfo.Key)
                 {
-                    case ConsoleKey.Enter:
+                    // Cancel-focused: only an explicit Y confirms; Enter cancels (safe default).
                     case ConsoleKey.Y:
                         windowSystem.CloseWindow(dialog, activateParent: true, force: false);
                         RunAction(description, action);
                         e.Handled = true;
                         break;
 
+                    case ConsoleKey.Enter:
                     case ConsoleKey.Escape:
                     case ConsoleKey.N:
                         windowSystem.CloseWindow(dialog, activateParent: true, force: false);
@@ -100,9 +144,11 @@ public class WorkbenchActionHandler(ConsoleWindowSystem windowSystem, Action<str
         {
             try
             {
-                updateStatus($"⟳ {description}…");
+                updateStatus($"[spinner] {description}…");
                 await action();
                 updateStatus("✓ Done");
+                windowSystem.EnqueueOnUIThread(() =>
+                    windowSystem.ToastService.Show($"{description} — done", SharpConsoleUI.Core.NotificationSeverity.Success));
                 await Task.Delay(3000);
                 updateStatus(string.Empty);
             }
@@ -110,6 +156,8 @@ public class WorkbenchActionHandler(ConsoleWindowSystem windowSystem, Action<str
             {
                 var msg = ex.Message.Length > 80 ? ex.Message[..80] : ex.Message;
                 updateStatus($"✗ {msg}");
+                windowSystem.EnqueueOnUIThread(() =>
+                    windowSystem.ToastService.Show($"{description} failed: {msg}", SharpConsoleUI.Core.NotificationSeverity.Danger));
             }
         });
     }

@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -21,7 +22,10 @@ public class ProjectionsView : FilterableTableView<ProjectionDefinition>
     protected override string DetailPanelHeader => "PROJECTION";
 
     /// <inheritdoc/>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Mauve;
+    protected override ColorRole DetailColorRole => ColorRole.Secondary;
+
+    /// <inheritdoc/>
+    protected override string? PageTitle => "PROJECTIONS";
 
     /// <inheritdoc/>
     protected override IEnumerable<ProjectionDefinition> GetItems(WorkbenchData data) =>
@@ -39,12 +43,12 @@ public class ProjectionsView : FilterableTableView<ProjectionDefinition>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a projection.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select a projection.[/]";
         }
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var suc = WorkbenchColors.Success.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
+        var suc = Theme.Success.ToMarkup();
 
         var lines = new List<string>
         {

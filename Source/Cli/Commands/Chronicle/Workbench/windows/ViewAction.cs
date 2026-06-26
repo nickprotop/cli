@@ -13,9 +13,11 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <param name="TriggerKey">The <see cref="ConsoleKey"/> that activates this action, or <see langword="null"/> for menu-only actions.</param>
 /// <param name="TriggerModifiers">Required modifier keys. Use <see langword="default"/> for no modifiers.</param>
 /// <param name="Execute">The delegate invoked when the action is activated.</param>
+/// <param name="Enabled">Whether this action is currently available. Disabled actions are shown in the toolbar with neutral styling but cannot be triggered via keyboard or context menu.</param>
 public record ViewAction(
     string Label,
     string? KeyHint,
     ConsoleKey? TriggerKey,
     ConsoleModifiers TriggerModifiers,
-    Action Execute);
+    Action Execute,
+    bool Enabled = true);

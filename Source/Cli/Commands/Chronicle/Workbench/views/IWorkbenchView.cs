@@ -51,7 +51,8 @@ public interface IWorkbenchView : IDisposable
     /// <summary>
     /// Gets the actions available for the currently selected row.
     /// Consumed by the keyboard dispatcher, right-click context menu, and the Actions menu bar item.
-    /// Returns an empty list when no item is selected or the view has no actions.
+    /// May include currently-unavailable actions with <see cref="ViewAction.Enabled"/> set to
+    /// <see langword="false"/>; consumers must check <see cref="ViewAction.Enabled"/> before invoking.
     /// </summary>
     IReadOnlyList<ViewAction> ViewActions => [];
 
@@ -92,11 +93,15 @@ public interface IWorkbenchView : IDisposable
     }
 
     /// <summary>
-    /// Builds the initial control hierarchy for this view. Called once during window construction.
+    /// Populates the framework navigation panel with this view's controls.
+    /// Called each time the user navigates to this view; implementations must call
+    /// <see cref="SharpConsoleUI.Controls.ScrollablePanelControl.ClearContents"/> first and then
+    /// add all controls directly to <paramref name="panel"/> so the framework can propagate a
+    /// bounded height to fill-aligned children.
     /// </summary>
+    /// <param name="panel">The framework <see cref="SharpConsoleUI.Controls.ScrollablePanelControl"/> provided by the navigation view.</param>
     /// <param name="windowSystem">The SharpConsoleUI window system.</param>
-    /// <returns>The root <see cref="IWindowControl"/> to embed in the navigation pane.</returns>
-    IWindowControl BuildContent(ConsoleWindowSystem windowSystem);
+    void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem);
 
     /// <summary>
     /// Called on the background refresh thread whenever new data arrives.

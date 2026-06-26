@@ -24,19 +24,19 @@ public static class WorkbenchViewRegistry
     // section boundaries when building the nav tree.
 
     /// <summary>Overview section header.</summary>
-    public static readonly WorkbenchSection SectionOverview = new("OVERVIEW", WorkbenchColors.Accent);
+    public static readonly WorkbenchSection SectionOverview = new("OVERVIEW", WorkbenchSectionAccent.Overview);
 
     /// <summary>Observation (observers, failures, jobs, recommendations) section header.</summary>
-    public static readonly WorkbenchSection SectionObservation = new("OBSERVATION", WorkbenchColors.Warning);
+    public static readonly WorkbenchSection SectionObservation = new("OBSERVATION", WorkbenchSectionAccent.Observation);
 
     /// <summary>Events (sequences, types) section header.</summary>
-    public static readonly WorkbenchSection SectionEvents = new("EVENTS", WorkbenchColors.Teal);
+    public static readonly WorkbenchSection SectionEvents = new("EVENTS", WorkbenchSectionAccent.Events);
 
     /// <summary>Projections (projections, read models) section header.</summary>
-    public static readonly WorkbenchSection SectionProjections = new("PROJECTIONS", WorkbenchColors.Mauve);
+    public static readonly WorkbenchSection SectionProjections = new("PROJECTIONS", WorkbenchSectionAccent.Projections);
 
     /// <summary>Server (event stores, namespaces, applications, users, identities, subscriptions) section header.</summary>
-    public static readonly WorkbenchSection SectionServer = new("SERVER", WorkbenchColors.Muted);
+    public static readonly WorkbenchSection SectionServer = new("SERVER", WorkbenchSectionAccent.Server);
 
     static readonly WorkbenchViewDefinition[] _all =
     [

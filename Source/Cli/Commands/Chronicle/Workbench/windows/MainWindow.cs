@@ -45,6 +45,8 @@ public class MainWindow(
     /// <returns>The fully configured <see cref="Window"/>.</returns>
     public Window Build()
     {
+        var theme = new WorkbenchTheme(windowSystem);
+
         _actionHandler = new WorkbenchActionHandler(
             windowSystem,
             text =>
@@ -57,6 +59,7 @@ public class MainWindow(
 
         _navigation = new WorkbenchNavigation(
             windowSystem,
+            theme,
             _views,
             settings,
             () => _activeEventStore,
@@ -77,6 +80,8 @@ public class MainWindow(
             () => _ = Task.Run(() => _refreshLoop!.FetchAndUpdate(CancellationToken.None)),
             () => _refreshLoop?.CurrentData);
 
+        var statusBarHelper = new WorkbenchStatusBar(theme);
+
         _refreshLoop = new WorkbenchRefreshLoop(
             dataService,
             settings,
@@ -84,40 +89,54 @@ public class MainWindow(
             _navigation,
             windowSystem,
             () => _activeEventStore,
-            () => _activeNamespace);
+            () => _activeNamespace,
+            statusBarHelper);
 
         WireViewCallbacks();
 
         _overlays = new WorkbenchOverlays(windowSystem, _views, _navigation, _actionHandler, _refreshLoop);
         var overlays = _overlays;
         var keyDispatcher = new WorkbenchKeyDispatcher(
-            _navigation, _views, _actionHandler, windowSystem, overlays, settings, state, () => _window);
+            _navigation,
+            _views,
+            _actionHandler,
+            windowSystem,
+            overlays,
+            settings,
+            state,
+            () => _window,
+            () => _refreshLoop?.UpdateStatusBar());
         var menuBar = new WorkbenchMenuBar(_navigation, overlays, windowSystem, settings, state).Build();
         var navView = _navigation.BuildNavigationView();
 
         _refreshLoop.Initialize(initialData);
 
+        var bg = theme.Background;
         var builtWindow = new WindowBuilder(windowSystem)
             .WithTitle(string.Empty)
             .Maximized()
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
             .WithBackgroundGradient(
                 ColorGradient.FromColors([
-                    WorkbenchColors.Background,
-                    WorkbenchColors.Surface,
-                    WorkbenchColors.Background
+                    bg.Tint(0.10),
+                    bg,
+                    bg.Shade(0.35)
                 ]),
-                GradientDirection.DiagonalDown)
+                GradientDirection.Vertical)
             .Borderless() // cspell:ignore Borderless
             .HideTitle()
             .HideCloseButton()
             .AddControl(menuBar)
             .AddControl(navView)
+            .AddControl(statusBarHelper.Control)
             .OnKeyPressed((_, e) => keyDispatcher.Dispatch(e))
             .WithAsyncWindowThread(_refreshLoop.RunAsync)
             .Build();
 
         _window = builtWindow;
+
+        // Register the main window with overlays so the command palette portal can use
+        // CreatePortal/RemovePortal and PreviewKeyPressed for key interception.
+        _overlays.SetWindow(builtWindow);
 
         // The menu bar is the first added control so the window system gives it initial focus.
         // Move focus to the nav view so arrow keys, action keys, and shortcuts work immediately.
@@ -182,7 +201,8 @@ public class MainWindow(
                     Namespace = _activeNamespace ?? settings.ResolveNamespace(),
                     ObserverId = obs.Id,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
-                }));
+                }),
+                obs => obs.Id);
         }
 
         if (_views[WorkbenchNavigation.IndexFailures] is FailedPartitionsView fv)
@@ -219,7 +239,8 @@ public class MainWindow(
                     ObserverId = fp.ObserverId,
                     Partition = fp.Partition,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
-                }));
+                }),
+                fp => $"{fp.ObserverId}/{fp.Partition}");
 
             fv.OnReplayAll = partitions => _actionHandler!.ConfirmThenExecuteAll(
                 $"Replay {partitions.Count} partition{(partitions.Count == 1 ? string.Empty : "s")}",
@@ -231,7 +252,8 @@ public class MainWindow(
                     ObserverId = fp.ObserverId,
                     Partition = fp.Partition,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
-                }));
+                }),
+                fp => $"{fp.ObserverId}/{fp.Partition}");
         }
 
         if (_views[WorkbenchNavigation.IndexJobs] is JobsView jv)
@@ -262,7 +284,8 @@ public class MainWindow(
                     EventStore = _activeEventStore ?? settings.ResolveEventStore(),
                     Namespace = _activeNamespace ?? settings.ResolveNamespace(),
                     JobId = job.Id
-                }));
+                }),
+                job => job.Type ?? job.Id.ToString());
 
             jv.OnResumeAll = jobs => _actionHandler!.ConfirmThenExecuteAll(
                 $"Resume {jobs.Count} job{(jobs.Count == 1 ? string.Empty : "s")}",
@@ -272,7 +295,8 @@ public class MainWindow(
                     EventStore = _activeEventStore ?? settings.ResolveEventStore(),
                     Namespace = _activeNamespace ?? settings.ResolveNamespace(),
                     JobId = job.Id
-                }));
+                }),
+                job => job.Type ?? job.Id.ToString());
         }
 
         if (_views[WorkbenchNavigation.IndexRecommendations] is RecommendationsView rv)
@@ -303,7 +327,8 @@ public class MainWindow(
                     EventStore = _activeEventStore ?? settings.ResolveEventStore(),
                     Namespace = _activeNamespace ?? settings.ResolveNamespace(),
                     RecommendationId = rec.Id
-                }));
+                }),
+                rec => rec.Name ?? rec.Id.ToString());
 
             rv.OnIgnoreAll = recs => _actionHandler!.ConfirmThenExecuteAll(
                 $"Ignore {recs.Count} recommendation{(recs.Count == 1 ? string.Empty : "s")}",
@@ -313,7 +338,8 @@ public class MainWindow(
                     EventStore = _activeEventStore ?? settings.ResolveEventStore(),
                     Namespace = _activeNamespace ?? settings.ResolveNamespace(),
                     RecommendationId = rec.Id
-                }));
+                }),
+                rec => rec.Name ?? rec.Id.ToString());
         }
 
         if (_views[WorkbenchNavigation.IndexReadModels] is ReadModelsView rmv)

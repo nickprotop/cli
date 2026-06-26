@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -41,8 +42,11 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     /// <inheritdoc/>
     protected override string DetailPanelHeader => "EVENT";
 
-    /// <summary>Uses teal to match the EVENTS section color.</summary>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Teal;
+    /// <inheritdoc/>
+    protected override ColorRole DetailColorRole => ColorRole.Info;
+
+    /// <inheritdoc/>
+    protected override string? PageTitle => "EVENT SEQUENCES";
 
     /// <inheritdoc/>
     protected override IEnumerable<AppendedEvent> GetItems(WorkbenchData data) => data.RecentEvents;
@@ -60,17 +64,41 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     ];
 
     /// <inheritdoc/>
-    protected override IReadOnlyList<ViewAction> GetAvailableActions(AppendedEvent item)
+    protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];
         if (OnViewEventTypeDefinition is not null)
         {
-            actions.Add(new ViewAction("View event type definition", "D", ConsoleKey.D, default, () => OnViewEventTypeDefinition(item)));
+            actions.Add(new ViewAction(
+                "View definition",
+                "D",
+                ConsoleKey.D,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnViewEventTypeDefinition(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
         if (OnViewObserversForType is not null)
         {
-            actions.Add(new ViewAction("View observers for this type", "V", ConsoleKey.V, default, () => OnViewObserversForType(item)));
+            actions.Add(new ViewAction(
+                "View observers",
+                "V",
+                ConsoleKey.V,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnViewObserversForType(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
         return actions;
@@ -91,11 +119,11 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select an event.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select an event.[/]";
         }
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var mut = WorkbenchColors.Muted.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
         var contentText = !string.IsNullOrEmpty(item.Content)
             ? JsonYamlFormatter.FormatAsYaml(item.Content, mut)
             : $"[{mut}](no content)[/]";

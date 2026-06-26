@@ -14,6 +14,8 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// </summary>
 public class EventStoresView : IWorkbenchView
 {
+    ConsoleWindowSystem? _windowSystem;
+    WorkbenchTheme? _themeInstance;
     TableControl? _table;
     MarkupControl? _helpPane;
     WorkbenchData? _pendingData;
@@ -26,6 +28,8 @@ public class EventStoresView : IWorkbenchView
     /// </summary>
     public Action<string>? OnSwitch { get; set; }
 
+    WorkbenchTheme Theme => _themeInstance ??= new WorkbenchTheme(_windowSystem!);
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -34,8 +38,10 @@ public class EventStoresView : IWorkbenchView
     }
 
     /// <inheritdoc/>
-    public IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
+    public void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem)
     {
+        _windowSystem = windowSystem;
+        _themeInstance = new WorkbenchTheme(windowSystem);
         _table = Controls.Table()
             .AddColumn("Event Store", SharpConsoleUI.Layout.TextJustification.Left, null)
             .Interactive()
@@ -48,9 +54,9 @@ public class EventStoresView : IWorkbenchView
 
         _helpPane = new MarkupControl(
         [
-            $"[{WorkbenchColors.Accent.ToMarkup()}][bold]SWITCH EVENT STORE[/][/]",
+            $"[{Theme.Accent.ToMarkup()}][bold]SWITCH EVENT STORE[/][/]",
             string.Empty,
-            $"  [{WorkbenchColors.Muted.ToMarkup()}]Select a store and press[/] [bold]Enter[/] [{WorkbenchColors.Muted.ToMarkup()}]to switch.[/]"
+            $"  [{Theme.Muted.ToMarkup()}]Select a store and press[/] [bold]Enter[/] [{Theme.Muted.ToMarkup()}]to switch.[/]"
         ])
         { Name = "EventStoresHelp" };
 
@@ -62,9 +68,12 @@ public class EventStoresView : IWorkbenchView
 
         // Apply any data that arrived before controls were ready (NavigationView lazy init).
         if (_pendingData is not null)
+        {
             UpdateData(_pendingData);
+        }
 
-        return root;
+        panel.ClearContents();
+        panel.AddControl(root);
     }
 
     /// <inheritdoc/>
@@ -88,9 +97,9 @@ public class EventStoresView : IWorkbenchView
 
         if (_helpPane is null) return;
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var suc = WorkbenchColors.Success.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
+        var suc = Theme.Success.ToMarkup();
 
         var lines = new List<string>
         {

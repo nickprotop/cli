@@ -1,7 +1,9 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using SharpConsoleUI.Controls;
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -46,25 +48,53 @@ public class ObserversView : FilterableTableView<ObserverInformation>
     /// <inheritdoc/>
     protected override string DetailPanelHeader => "OBSERVER";
 
-    /// <summary>Uses the warning amber to match the OBSERVATION section color.</summary>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Warning;
+    /// <inheritdoc/>
+    protected override ColorRole DetailColorRole => ColorRole.Warning;
 
     /// <inheritdoc/>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IReadOnlyList<ViewAction> GetAvailableActions(ObserverInformation item)
+    protected override string? PageTitle => "OBSERVERS";
+
+    /// <inheritdoc/>
+    protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];
         if (OnReplay is not null)
         {
-            actions.Add(new ViewAction("Replay observer", "R", ConsoleKey.R, default, () => OnReplay(item)));
+            actions.Add(new ViewAction(
+                "Replay observer",
+                "R",
+                ConsoleKey.R,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnReplay(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
-        var checkedItems = Checked;
-        if (OnReplayAll is not null && checkedItems.Count > 1)
+        if (OnReplayAll is not null)
         {
-            actions.Add(new ViewAction($"Replay {checkedItems.Count} checked", null, null, default, () => OnReplayAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Replay {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnReplayAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
         return actions;
@@ -103,10 +133,10 @@ public class ObserversView : FilterableTableView<ObserverInformation>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select an observer.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select an observer.[/]";
         }
 
-        var mut = WorkbenchColors.Muted.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
         var stateColor = GetObserverStateColor(item);
 
         var lines = new List<string>
@@ -177,19 +207,19 @@ public class ObserversView : FilterableTableView<ObserverInformation>
         _ => 4
     };
 
-    static string GetObserverStateColor(ObserverInformation obs) => obs.RunningState switch
-    {
-        ObserverRunningState.Active => WorkbenchColors.Success.ToMarkup(),
-        ObserverRunningState.Replaying => WorkbenchColors.Warning.ToMarkup(),
-        ObserverRunningState.Disconnected => WorkbenchColors.Danger.ToMarkup(),
-        _ => WorkbenchColors.Muted.ToMarkup()
-    };
-
     static string GetObserverIcon(ObserverInformation obs) => obs.RunningState switch
     {
         ObserverRunningState.Active => "●",
         ObserverRunningState.Replaying => "▲",
         ObserverRunningState.Disconnected => "⊘",
         _ => "○"
+    };
+
+    string GetObserverStateColor(ObserverInformation obs) => obs.RunningState switch
+    {
+        ObserverRunningState.Active => Theme.Success.ToMarkup(),
+        ObserverRunningState.Replaying => Theme.Warning.ToMarkup(),
+        ObserverRunningState.Disconnected => Theme.Danger.ToMarkup(),
+        _ => Theme.Muted.ToMarkup()
     };
 }

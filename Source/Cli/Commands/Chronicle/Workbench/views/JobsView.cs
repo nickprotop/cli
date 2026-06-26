@@ -62,28 +62,82 @@ public class JobsView : FilterableTableView<Job>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IReadOnlyList<ViewAction> GetAvailableActions(Job item)
+    protected override string? PageTitle => "JOBS";
+
+    /// <inheritdoc/>
+    protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];
         if (OnStopJob is not null)
         {
-            actions.Add(new ViewAction("Stop job", "S", ConsoleKey.S, default, () => OnStopJob(item)));
+            actions.Add(new ViewAction(
+                "Stop job",
+                "S",
+                ConsoleKey.S,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnStopJob(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
         if (OnResumeJob is not null)
         {
-            actions.Add(new ViewAction("Resume job", "U", ConsoleKey.U, default, () => OnResumeJob(item)));
+            actions.Add(new ViewAction(
+                "Resume job",
+                "U",
+                ConsoleKey.U,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnResumeJob(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
-        var checkedItems = Checked;
-        if (OnStopAll is not null && checkedItems.Count > 1)
+        if (OnStopAll is not null)
         {
-            actions.Add(new ViewAction($"Stop {checkedItems.Count} checked", null, null, default, () => OnStopAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Stop {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnStopAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
-        if (OnResumeAll is not null && checkedItems.Count > 1)
+        if (OnResumeAll is not null)
         {
-            actions.Add(new ViewAction($"Resume {checkedItems.Count} checked", null, null, default, () => OnResumeAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Resume {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnResumeAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
         return actions;
@@ -113,26 +167,33 @@ public class JobsView : FilterableTableView<Job>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a job.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select a job.[/]";
         }
 
-        var mut = WorkbenchColors.Muted.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
         var statusColor = GetJobStatusColor(item.Status);
 
         var lines = new List<string>
         {
             $"[{mut}]Id[/]       {item.Id}",
             $"[{mut}]Type[/]     {item.Type ?? "—"}",
-            $"[{mut}]Status[/]   [{statusColor}]{item.Status}[/]",
-            $"[{mut}]Progress[/] {FormatProgress(item.Progress)}"
+            $"[{mut}]Status[/]   [{statusColor}]{item.Status}[/]"
         };
+
+        if (item.Progress?.TotalSteps > 0)
+        {
+            lines.Add($"[{mut}]Progress[/] {WorkbenchUi.GradientBar(item.Progress.SuccessfulSteps, item.Progress.TotalSteps, 24)} {item.Progress.SuccessfulSteps}/{item.Progress.TotalSteps}");
+        }
+        else
+        {
+            lines.Add($"[{mut}]Progress[/] {FormatProgress(item.Progress)}");
+        }
 
         if (item.Progress is not null)
         {
-            lines.Add($"[{mut}]Steps[/]    {item.Progress.SuccessfulSteps}/{item.Progress.TotalSteps}");
             if (item.Progress.FailedSteps > 0)
             {
-                lines.Add($"[{WorkbenchColors.Danger.ToMarkup()}]Failed[/]   {item.Progress.FailedSteps}");
+                lines.Add($"[{Theme.Danger.ToMarkup()}]Failed[/]   {item.Progress.FailedSteps}");
             }
 
             if (!string.IsNullOrEmpty(item.Progress.Message))
@@ -164,15 +225,6 @@ public class JobsView : FilterableTableView<Job>
         item.Id.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase) ||
         item.Status.ToString().Contains(filter, StringComparison.OrdinalIgnoreCase);
 
-    static string GetJobStatusColor(JobStatus status) => status switch
-    {
-        JobStatus.Running => WorkbenchColors.Success.ToMarkup(),
-        JobStatus.Failed => WorkbenchColors.Danger.ToMarkup(),
-        JobStatus.Stopped => WorkbenchColors.Warning.ToMarkup(),
-        JobStatus.CompletedWithFailures => WorkbenchColors.Warning.ToMarkup(),
-        _ => WorkbenchColors.Muted.ToMarkup()
-    };
-
     static string FormatProgress(JobProgress? p)
     {
         if (p is null || p.TotalSteps == 0)
@@ -182,4 +234,13 @@ public class JobsView : FilterableTableView<Job>
 
         return $"{p.SuccessfulSteps}/{p.TotalSteps}";
     }
+
+    string GetJobStatusColor(JobStatus status) => status switch
+    {
+        JobStatus.Running => Theme.Success.ToMarkup(),
+        JobStatus.Failed => Theme.Danger.ToMarkup(),
+        JobStatus.Stopped => Theme.Warning.ToMarkup(),
+        JobStatus.CompletedWithFailures => Theme.Warning.ToMarkup(),
+        _ => Theme.Muted.ToMarkup()
+    };
 }

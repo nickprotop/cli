@@ -8,6 +8,7 @@ using SharpConsoleUI.Controls;
 using SharpConsoleUI.Events;
 using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 using UITableRow = SharpConsoleUI.Controls.TableRow;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
@@ -21,17 +22,23 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <typeparam name="TItem">The domain item type displayed in each row.</typeparam>
 public abstract class FilterableTableView<TItem> : IWorkbenchView
 {
-    /// <summary>Rows consumed by non-table chrome. Subtracted from terminal height to compute page size.</summary>
-    const int NonTableRowOverhead = 14;
+    /// <summary>Vertical chrome (toolbar, rule, borders) above/below the table that reduces row capacity.</summary>
+    const int ContentChromeHeight = 6;
 
     /// <summary>Minimum number of table rows to show regardless of terminal height.</summary>
     const int MinPageSize = 5;
 
+    /// <summary>Rows reserved below the table for the pager strip.</summary>
+    const int PagerRowHeight = 2;
+
     ConsoleWindowSystem? _windowSystem;
+    WorkbenchTheme? _theme;
     HorizontalGridControl? _root;
     TableControl? _table;
     PanelControl? _detailPanel;
     PromptControl? _filterPrompt;
+    ToolbarControl? _toolbar;
+    IReadOnlyList<ButtonControl> _actionButtons = [];
     MarkupControl? _pageIndicator;
     ButtonControl? _prevPageButton;
     ButtonControl? _nextPageButton;
@@ -60,8 +67,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     public virtual string ViewHelp => string.Empty;
 
     /// <inheritdoc/>
-    public IReadOnlyList<ViewAction> ViewActions =>
-        SelectedItem is TItem item ? GetAvailableActions(item) : [];
+    public IReadOnlyList<ViewAction> ViewActions => GetToolbarActionTemplate();
 
     /// <summary>Gets column definitions: (name, justification, fixed width or null for flex).</summary>
     protected abstract IReadOnlyList<(string Name, TextJustification Justify, int? Width)> Columns { get; }
@@ -69,8 +75,23 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     /// <summary>Gets the header label shown on the right detail panel.</summary>
     protected virtual string DetailPanelHeader => "DETAIL";
 
-    /// <summary>Gets the border color for the right detail panel.</summary>
-    protected virtual SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Accent;
+    /// <summary>
+    /// Gets the semantic color role for this view's detail-pane border.
+    /// Override per view to assign a view-specific role that re-resolves from the theme on every repaint.
+    /// </summary>
+    protected virtual ColorRole DetailColorRole => ColorRole.Primary;
+
+    /// <summary>
+    /// Gets the semantic color role applied to the main data table's row-selection accent.
+    /// Defaults to <see cref="DetailColorRole"/> so each view's table shares the view's accent.
+    /// Override to use a different role for the table independently of the detail pane.
+    /// </summary>
+    protected virtual ColorRole TableAccentRole => DetailColorRole;
+
+    /// <summary>
+    /// Gets the theme-aware color accessor, bound to the window system on first call.
+    /// </summary>
+    protected WorkbenchTheme Theme => _theme ??= new WorkbenchTheme(_windowSystem!);
 
     /// <summary>Gets a value indicating whether to enable checkbox multi-select mode on the table.</summary>
     protected virtual bool HasCheckboxMode => false;
@@ -105,12 +126,34 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
         }
     }
 
-    int PageSize => Math.Max(MinPageSize, Console.WindowHeight - NonTableRowOverhead);
+    /// <summary>
+    /// Gets the page title shown in the toolbar header strip.
+    /// When non-null, a <see cref="ToolbarControl"/> is rendered above the header rule and table,
+    /// hosting the title, action buttons for the current selection, and the filter prompt.
+    /// Override in concrete views to supply the view-specific title (e.g. <c>"OBSERVERS"</c>).
+    /// When <see langword="null"/>, no toolbar is rendered.
+    /// </summary>
+    protected virtual string? PageTitle => null;
+
+    /// <summary>
+    /// Computes how many rows to load per page from the available content height. Pagination drives
+    /// the visible row count (the loaded rows fill the table), so this is derived from the terminal
+    /// height minus the surrounding chrome rather than the table's own arranged height.
+    /// </summary>
+    int PageSize =>
+        Math.Max(MinPageSize, Console.WindowHeight - ContentChromeHeight - PagerRowHeight);
 
     /// <inheritdoc/>
-    public virtual IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
+    public virtual void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem)
     {
+        // PopulateContent runs on every navigation to this view; release the previous build first so a
+        // re-populate does not leak controls or duplicate the resize / table event subscriptions, and
+        // clear the panel up front so a failure mid-build cannot leave stale controls displayed.
+        DisposeControls();
+        panel.ClearContents();
+
         _windowSystem = windowSystem;
+        _theme = new WorkbenchTheme(windowSystem);
         var tableBuilder = Controls.Table();
 
         foreach (var (name, justify, width) in Columns)
@@ -118,11 +161,14 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             tableBuilder.AddColumn(name, justify, width);
         }
 
-        tableBuilder = tableBuilder
+        tableBuilder = WorkbenchUi.StyleDataTable(tableBuilder, TableAccentRole)
             .Interactive()
-            .WithSorting()
             .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .OnSelectedRowChanged((_, _) => RefreshDetail())
+            .OnSelectedRowChanged((_, _) =>
+            {
+                RebuildToolbarButtons();
+                RefreshDetail();
+            })
             .OnRowActivated((_, _) => ActivateSelected())
             .WithName($"{GetType().Name}Table");
 
@@ -132,12 +178,16 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
         }
 
         _table = tableBuilder.Build();
+        _table.TruncationFade = true;
 
         // SortByColumn (called on header click) does NOT fire PropertyChanged for SortColumnIndex
         // or CurrentSortDirection — those properties have no setters. MouseClick fires after
         // SortByColumn completes, giving us the correct new sort state to detect header clicks.
         _table.MouseClick += OnTableMouseClick;
         _table.MouseRightClick += OnTableRightClick;
+
+        // Wire checkbox multi-selection changes so toolbar enabled-state reflects checked count promptly.
+        _table.MultiSelectionChanged += OnTableMultiSelectionChanged;
 
         // Wire per-column typed comparers so SortByColumn uses our comparers, not string comparison.
         // This ensures the sort map produced by SortByColumn matches our pre-sorted page data.
@@ -154,18 +204,23 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
 
         _pageIndicator = new MarkupControl([string.Empty]) { Name = $"{GetType().Name}Page" };
 
-        _prevPageButton = Controls.Button(" ◄ ")
+        _prevPageButton = Controls.Button(" ‹ ")
             .OnClick((_, _) => PreviousPage())
+            .WithColorRole(ColorRole.Primary)
             .WithName($"{GetType().Name}PrevPage")
             .Build();
 
-        _nextPageButton = Controls.Button(" ► ")
+        _nextPageButton = Controls.Button(" › ")
             .OnClick((_, _) => NextPage())
+            .WithColorRole(ColorRole.Primary)
             .WithName($"{GetType().Name}NextPage")
             .Build();
 
+        // The explicit WithInputWidth gives the hosted prompt a visible field in the toolbar's
+        // fixed-width layout; without it an empty prompt measures ~0 and renders invisibly.
         _filterPrompt = Controls.Prompt("/ filter: ")
             .WithHistory(true)
+            .WithInputWidth(28)
             .WithTabCompleter((input, _) => GetCompletions(input))
             .OnInputChanged((_, text) =>
             {
@@ -179,33 +234,46 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             .Build();
 
         _detailPanel = Controls.Panel()
-            .WithContent($"[{WorkbenchColors.Muted.ToMarkup()}]Select an item.[/]")
+            .WithContent($"[{Theme.Muted.ToMarkup()}]Select an item.[/]")
             .WithHeader($" {DetailPanelHeader} ")
             .Rounded()
-            .WithBorderColor(DetailBorderColor)
+            .WithColorRole(DetailColorRole)
             .WithPadding(1, 0, 1, 0)
             .FillVertical()
             .WithName($"{GetType().Name}Detail")
             .Build();
 
-        var pageNavRow = HorizontalGridControl.Create()
-            .Column(c => c.Width(5).Add(_prevPageButton))
-            .Column(c => c.Add(_pageIndicator))
-            .Column(c => c.Width(5).Add(_nextPageButton))
+        // Pager row: fixed-width prev/next buttons flanking a centered page indicator.
+        var pageNavRow = Controls.Grid()
+            .Columns(SharpConsoleUI.Layout.GridLength.Cells(5), SharpConsoleUI.Layout.GridLength.Star(1), SharpConsoleUI.Layout.GridLength.Cells(5))
+            .Rows(SharpConsoleUI.Layout.GridLength.Auto())
+            .Place(_prevPageButton, 0, 0)
+            .Place(_pageIndicator, 0, 1)
+            .Place(_nextPageButton, 0, 2)
             .Build();
 
+        // Left pane: table + pager stacked in a ScrollablePanel.
+        // The framework panel (propagated from NavigationView) provides the bounded height chain:
+        // framework panel → _root HGC → column → leftPane → table (Fill). No outer wrapper needed.
         var leftPane = Controls.ScrollablePanel()
-            .AddControl(_filterPrompt)
             .AddControl(_table)
             .AddControl(pageNavRow)
             .WithVerticalScroll(ScrollMode.None)
             .Build();
 
+        // Main two-column shell: left pane (flex) | detail panel (fixed width) with a draggable splitter.
         _root = HorizontalGridControl.Create()
             .Column(c => c.Add(leftPane))
             .WithSplitterAfter(0)
             .Column(c => c.Width(DetailPaneWidth).Add(_detailPanel))
             .Build();
+
+        // Fill the framework panel so the HGC receives bounded height, which propagates through
+        // leftPane to the table and allows VerticalAlignment.Fill to trigger properly.
+        _root.VerticalAlignment = SharpConsoleUI.Layout.VerticalAlignment.Fill;
+
+        // Re-paginate on terminal resize so the page size tracks the new terminal height.
+        windowSystem.WindowResized += OnTerminalResized;
 
         if (_pendingData is not null)
         {
@@ -216,7 +284,39 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             _filterPrompt.Input = _currentFilter;
         }
 
-        return _root;
+        // Add controls directly to the framework panel so it propagates bounded height (avoids the
+        // double-wrap — workbench ScrollablePanel → inner ScrollablePanel — that offered the table
+        // int.MaxValue, collapsing it to ~6 rows). The panel was already cleared at the top.
+
+        // Build the toolbar when PageTitle is set. The toolbar hosts title + action buttons +
+        // fill spacer + the filter prompt (moved out of leftPane so it appears in the header band).
+        // Action buttons are captured so RebuildToolbarButtons can update them in-place on selection
+        // change without clearing the toolbar (avoids Container=null churn on the filter prompt).
+        var pageTitle = PageTitle;
+        if (pageTitle is not null)
+        {
+            (_toolbar, _actionButtons) = WorkbenchUi.BuildToolbarHeader(
+                Theme.Accent,
+                pageTitle,
+                BuildToolbarActionDescriptors(),
+                _filterPrompt);
+
+            panel.AddControl(_toolbar);
+            panel.AddControl(WorkbenchUi.BuildHeaderRule(TableAccentRole));
+            panel.AddControl(_root);
+            return;
+        }
+
+        var legacyHeader = BuildHeader();
+        if (legacyHeader is not null)
+        {
+            panel.AddControl(legacyHeader);
+            panel.AddControl(WorkbenchUi.BuildHeaderRule(TableAccentRole));
+            panel.AddControl(_root);
+            return;
+        }
+
+        panel.AddControl(_root);
     }
 
     /// <inheritdoc/>
@@ -340,22 +440,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        if (_table is not null)
-        {
-            _table.MouseClick -= OnTableMouseClick;
-            _table.MouseRightClick -= OnTableRightClick;
-        }
-
-        _root?.Dispose();
-        _table?.Dispose();
-        _detailPanel?.Dispose();
-        _filterPrompt?.Dispose();
-        _pageIndicator?.Dispose();
-        _prevPageButton?.Dispose();
-        _nextPageButton?.Dispose();
-    }
+    public void Dispose() => DisposeControls();
 
     /// <summary>Sets the filter text and rebuilds the table rows.</summary>
     /// <param name="filter">The filter string to apply.</param>
@@ -419,13 +504,16 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     }
 
     /// <summary>
-    /// Returns the actions available when <paramref name="item"/> is selected.
-    /// Override in action views to expose view-specific actions to the keyboard dispatcher
-    /// and right-click context menu.
+    /// Returns the complete, selection-independent action template for this view's toolbar.
+    /// The returned list has a STABLE count that never changes, so buttons are built once and updated
+    /// in-place on every selection or check-state change. Each action's <see cref="ViewAction.Execute"/>
+    /// and <see cref="ViewAction.Enabled"/> must resolve the current <see cref="SelectedItem"/> and
+    /// <see cref="CheckedItems"/> at invocation time — never capture a specific item.
     /// </summary>
-    /// <param name="item">The currently selected item.</param>
-    /// <returns>The list of actions the user can invoke on this item.</returns>
-    protected virtual IReadOnlyList<ViewAction> GetAvailableActions(TItem item) => [];
+    /// <returns>
+    /// The full ordered set of toolbar actions for this view, or an empty list for views with no actions.
+    /// </returns>
+    protected virtual IReadOnlyList<ViewAction> GetToolbarActionTemplate() => [];
 
     /// <summary>
     /// Returns <see langword="true"/> when the user may sort by the given column.
@@ -434,6 +522,18 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     /// <param name="columnIndex">The zero-based column index to test.</param>
     /// <returns><see langword="true"/> if the column is sortable.</returns>
     protected virtual bool IsSortableColumn(int columnIndex) => true;
+
+    /// <summary>
+    /// Optionally returns a page header control rendered above the table and splitter.
+    /// When non-null, the returned control is stacked above a rule and the main content pane.
+    /// Override in views that should show a <see cref="WorkbenchUi.BuildPageHeader"/> identity strip;
+    /// the default returns <see langword="null"/> so no header is shown.
+    /// </summary>
+    /// <returns>
+    /// A header <see cref="IWindowControl"/>, typically built with <see cref="WorkbenchUi.BuildPageHeader"/>,
+    /// or <see langword="null"/> to suppress the header entirely.
+    /// </returns>
+    protected virtual IWindowControl? BuildHeader() => null;
 
     static int ContextMenuWidth(List<ViewAction> actions)
     {
@@ -451,6 +551,45 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
 
         button.IsEnabled = enabled;
     }
+
+    IReadOnlyList<(string Text, ColorRole Role, bool Enabled, Action OnClick)> BuildToolbarActionDescriptors()
+    {
+        var template = GetToolbarActionTemplate();
+        return [.. template.Select((a, i) =>
+        {
+            var text = a.KeyHint is not null ? $"{a.Label} ({a.KeyHint})" : a.Label;
+            var lc = a.Label.ToUpperInvariant();
+            var role = lc.Contains("STOP") || lc.Contains("REMOVE") || lc.Contains("DELETE") || lc.Contains("IGNORE")
+                ? ColorRole.Danger
+                : ColorRole.Warning;
+            var index = i;
+            return (text, role, a.Enabled, (Action)(() => InvokeToolbarAction(index)));
+        })];
+    }
+
+    void InvokeToolbarAction(int index)
+    {
+        var template = GetToolbarActionTemplate();
+        if (index < template.Count && template[index].Enabled)
+        {
+            template[index].Execute();
+        }
+    }
+
+    void RebuildToolbarButtons()
+    {
+        if (_toolbar is null || _filterPrompt is null)
+        {
+            return;
+        }
+
+        // Update each action button in-place (IsEnabled, ColorRole, Text) without clearing the
+        // toolbar — preserves the filter prompt's container reference across selection changes.
+        // Returns the (possibly new) button list when a fallback rebuild was needed.
+        _actionButtons = WorkbenchUi.UpdateToolbarActions(_toolbar, _actionButtons, BuildToolbarActionDescriptors(), _filterPrompt);
+    }
+
+    void OnTableMultiSelectionChanged(object? sender, int count) => RebuildToolbarButtons();
 
     int ComputeTotalPages(int itemCount)
     {
@@ -490,6 +629,77 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     }
 
     /// <summary>
+    /// Re-applies the explicit grid size and re-paginates when the terminal is resized.
+    /// The GridControl is sized from terminal dimensions, so it must be updated on every resize.
+    /// Pagination is also re-computed because the table's visible-row capacity changes with height.
+    /// </summary>
+    /// <param name="sender">The event source.</param>
+    /// <param name="size">The new terminal size.</param>
+    void OnTerminalResized(object? sender, SharpConsoleUI.Helpers.Size size)
+    {
+        if (_table is null)
+        {
+            return;
+        }
+
+        // The page size is derived from the terminal height, so on resize clamp the page index to the
+        // new capacity and re-render so the pager and loaded rows reflect the new height.
+        var filtered = GetFiltered();
+        var totalPages = ComputeTotalPages(filtered.Count);
+        if (_pageIndex >= totalPages)
+        {
+            _pageIndex = Math.Max(0, totalPages - 1);
+        }
+
+        RebuildRows();
+    }
+
+    /// <summary>Detaches the terminal-resize handler if it was attached.</summary>
+    void UnsubscribeFromResize()
+    {
+        if (_windowSystem is null)
+        {
+            return;
+        }
+
+        _windowSystem.WindowResized -= OnTerminalResized;
+    }
+
+    /// <summary>
+    /// Detaches event handlers and disposes the built controls. Called from <see cref="Dispose"/> and
+    /// at the start of <see cref="PopulateContent"/> (which re-runs on every navigation to this view)
+    /// so a re-populate does not leak the previous build's controls or duplicate its event handlers.
+    /// </summary>
+    void DisposeControls()
+    {
+        UnsubscribeFromResize();
+
+        if (_table is not null)
+        {
+            _table.MouseClick -= OnTableMouseClick;
+            _table.MouseRightClick -= OnTableRightClick;
+            _table.MultiSelectionChanged -= OnTableMultiSelectionChanged;
+        }
+
+        _root?.Dispose();
+        _table?.Dispose();
+        _detailPanel?.Dispose();
+        _toolbar?.Dispose();
+
+        // _filterPrompt is owned by _toolbar (added as a toolbar item) — ToolbarControl.OnDisposing
+        // disposes all its items, so we must NOT dispose _filterPrompt here to avoid double-dispose.
+        // Only dispose it directly when no toolbar was built (PageTitle == null path).
+        if (_toolbar is null)
+        {
+            _filterPrompt?.Dispose();
+        }
+
+        _pageIndicator?.Dispose();
+        _prevPageButton?.Dispose();
+        _nextPageButton?.Dispose();
+    }
+
+    /// <summary>
     /// Fires after every left-click on the table, including header clicks.
     /// <c>SortByColumn</c> runs before <c>MouseClick</c> fires, so we can compare the table's new
     /// sort state against what we applied last time. When it differs, a header click changed the
@@ -515,12 +725,12 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
 
     void OnTableRightClick(object? sender, MouseEventArgs e)
     {
-        if (_windowSystem is null || SelectedItem is not TItem item)
+        if (_windowSystem is null)
         {
             return;
         }
 
-        var actions = GetAvailableActions(item).ToList();
+        var actions = GetToolbarActionTemplate().Where(a => a.Enabled).ToList();
         if (actions.Count == 0)
         {
             return;
@@ -537,8 +747,8 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
         }
 
         var menuBuilder = Controls.Menu().Vertical()
-            .WithMenuBarColors(WorkbenchColors.Background, WorkbenchColors.Foreground, WorkbenchColors.Accent, WorkbenchColors.Background)
-            .WithDropdownColors(WorkbenchColors.Background, WorkbenchColors.Foreground, WorkbenchColors.Accent, WorkbenchColors.Background);
+            .WithMenuBarColors(Theme.Background, Theme.Foreground, Theme.Accent, Theme.Background)
+            .WithDropdownColors(Theme.Background, Theme.Foreground, Theme.Accent, Theme.Background);
 
         foreach (var action in actions)
         {
@@ -559,7 +769,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             .WithTitle(string.Empty)
             .HideTitle()
             .HideCloseButton()
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
+            .WithColors(Theme.Foreground, Theme.Background)
             .WithSize(width, height)
             .AtPosition(clampedX, clampedY)
             .WithCloseOnDeactivate(true)
@@ -589,6 +799,9 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
         var sortDir = _table.CurrentSortDirection;
 
         var selectedKey = SelectedItem is TItem sel ? GetKey(sel) : null;
+
+        // Read capacity from the table — GetVisibleRowCount() returns real fitted count post-layout,
+        // or RowCount (safe fallback) pre-layout.
         var pageSize = PageSize;
 
         // Sort the FULL filtered dataset first, then paginate.
@@ -654,10 +867,17 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     {
         if (_pageIndicator is not null)
         {
-            var mut = WorkbenchColors.Muted.ToMarkup();
-            _pageIndicator.Text = totalItems <= pageSize
-                ? $"[{mut}]{totalItems} item{(totalItems == 1 ? string.Empty : "s")}[/]"
-                : $"[{mut}]{(_pageIndex * pageSize) + 1}–{Math.Min((_pageIndex + 1) * pageSize, totalItems)} of {totalItems}[/]";
+            var mut = Theme.Muted.ToMarkup();
+            if (totalItems <= pageSize)
+            {
+                _pageIndicator.Text = $"[{mut}]{totalItems} item{(totalItems == 1 ? string.Empty : "s")}[/]";
+            }
+            else
+            {
+                var first = (_pageIndex * pageSize) + 1;
+                var last = Math.Min((_pageIndex + 1) * pageSize, totalItems);
+                _pageIndicator.Text = $"[{mut}]{first}–{last} of {totalItems}[/]";
+            }
         }
 
         SetButtonEnabled(_prevPageButton, _pageIndex > 0);

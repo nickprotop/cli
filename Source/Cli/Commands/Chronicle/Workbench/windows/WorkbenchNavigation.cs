@@ -13,6 +13,7 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// All navigation items are driven by <see cref="WorkbenchViewRegistry"/> — add a view there and it appears here automatically.
 /// </summary>
 /// <param name="windowSystem">The SharpConsoleUI window system.</param>
+/// <param name="theme">The workbench theme used to resolve chrome and section accent colors.</param>
 /// <param name="views">The ordered array of <see cref="IWorkbenchView"/> instances — must match <see cref="WorkbenchViewRegistry.All"/> order.</param>
 /// <param name="settings">Workbench settings — used to resolve the active event store and namespace.</param>
 /// <param name="getActiveEventStore">Returns the currently active event store name, or <see langword="null"/> for the default.</param>
@@ -23,6 +24,7 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <param name="getLatestData">Returns the latest cached <see cref="WorkbenchData"/> snapshot, or <see langword="null"/> if none available yet.</param>
 public class WorkbenchNavigation(
     ConsoleWindowSystem windowSystem,
+    WorkbenchTheme theme,
     IWorkbenchView[] views,
     WorkbenchSettings settings,
     Func<string?> getActiveEventStore,
@@ -76,6 +78,9 @@ public class WorkbenchNavigation(
     const int NavExpandedThreshold = 90;
     const int NavCompactThreshold = 40;
 
+    /// <summary>Header items paired with their section accent, used to re-apply colors on theme change.</summary>
+    readonly List<(NavigationItem Header, WorkbenchSectionAccent Accent)> _sectionHeaders = [];
+
     NavigationItem? _observersItem;
     NavigationItem? _failuresItem;
     NavigationItem? _recommendationsItem;
@@ -114,11 +119,8 @@ public class WorkbenchNavigation(
 
         navView = Controls.NavigationView()
             .WithNavWidth(28)
-            .WithPaneHeader($"[bold {WorkbenchColors.Accent.ToMarkup()}] ◆ CHRONICLE[/]")
-            .WithSelectedColors(new SharpConsoleUI.Color(255, 255, 255, 255), WorkbenchColors.SelectedBg)
+            .WithPaneHeader($"[bold {theme.Accent.ToMarkup()}] ◆ CHRONICLE[/]")
             .WithContentBorder(BorderStyle.Rounded)
-            .WithContentBorderColor(WorkbenchColors.ContentBorder)
-            .WithContentBackground(WorkbenchColors.Surface)
             .WithContentPadding(1, 0, 1, 0)
             .WithPaneDisplayMode(NavigationViewDisplayMode.Auto)
             .WithExpandedThreshold(NavExpandedThreshold)
@@ -174,12 +176,13 @@ public class WorkbenchNavigation(
 
             if (!ReferenceEquals(def.Section, lastSection))
             {
-                currentHeader = navView!.AddHeader(def.Section.Title, def.Section.Color);
+                currentHeader = navView!.AddHeader(def.Section.Title, theme.SectionAccent(def.Section.Accent));
+                _sectionHeaders.Add((currentHeader, def.Section.Accent));
                 lastSection = def.Section;
             }
 
             var navItem = navView!.AddItemToHeader(currentHeader!, def.NavText, def.NavIcon, def.NavSubtitle);
-            navView.SetItemContent(navItem, panel => panel.AddControl(views[viewIndex].BuildContent(windowSystem)));
+            navView.SetItemContent(navItem, panel => views[viewIndex].PopulateContent(panel, windowSystem));
         }
 
         var allItems = navView!.Items;
@@ -188,6 +191,8 @@ public class WorkbenchNavigation(
         _recommendationsItem = FindItemByText(allItems, WorkbenchViewRegistry.All[IndexRecommendations].NavText);
 
         _navView = navView;
+
+        theme.Changed += ApplyThemeColors;
 
         // Guard: registry count must equal views.Length — they're both built from the same registry.
         var nonHeaderCount = allItems.Count(i => i.ItemType != NavigationItemType.Header);
@@ -357,6 +362,16 @@ public class WorkbenchNavigation(
         return null;
     }
 
+    void ApplyThemeColors()
+    {
+        foreach (var (header, accent) in _sectionHeaders)
+        {
+            header.HeaderColor = theme.SectionAccent(accent);
+        }
+
+        _navView?.Invalidate();
+    }
+
     void ShowStringPickerOverlay(
         string title,
         string columnHeader,
@@ -365,7 +380,7 @@ public class WorkbenchNavigation(
         string activeItem,
         Action<string> onSelected)
     {
-        var acc = WorkbenchColors.Accent.ToMarkup();
+        var acc = theme.Accent.ToMarkup();
 
         var pickerTable = Controls.Table()
             .AddColumn(columnHeader, SharpConsoleUI.Layout.TextJustification.Left, null)
@@ -384,7 +399,6 @@ public class WorkbenchNavigation(
         var height = Math.Min(items.Count + PickerOverlayHeightPadding, MaxPickerOverlayHeight);
         picker = new WindowBuilder(windowSystem)
             .WithTitle(title)
-            .WithColors(WorkbenchColors.Foreground, WorkbenchColors.Background)
             .WithSize(PickerOverlayWidth, height)
             .Centered()
             .AddControl(pickerTable)

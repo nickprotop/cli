@@ -3,6 +3,7 @@
 
 using SharpConsoleUI.Controls;
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -35,8 +36,8 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     /// <inheritdoc/>
     protected override string DetailPanelHeader => "EVENT TYPE";
 
-    /// <summary>Uses teal to match the EVENTS section color.</summary>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Teal;
+    /// <inheritdoc/>
+    protected override ColorRole DetailColorRole => ColorRole.Info;
 
     /// <inheritdoc/>
     protected override int DefaultSortColumn => 0;
@@ -45,15 +46,30 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     protected override SortDirection DefaultSortDirection => SortDirection.Ascending;
 
     /// <inheritdoc/>
+    protected override string? PageTitle => "EVENT TYPES";
+
+    /// <inheritdoc/>
     protected override bool IsSortableColumn(int columnIndex) => columnIndex == 0;
 
     /// <inheritdoc/>
-    protected override IReadOnlyList<ViewAction> GetAvailableActions(EventTypeRegistration item)
+    protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];
         if (OnViewObservers is not null)
         {
-            actions.Add(new ViewAction("View observers for this type", "V", ConsoleKey.V, default, () => OnViewObservers(item)));
+            actions.Add(new ViewAction(
+                "View observers",
+                "V",
+                ConsoleKey.V,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnViewObservers(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
         return actions;
@@ -75,11 +91,11 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select an event type.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select an event type.[/]";
         }
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var mut = WorkbenchColors.Muted.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
         var schemaContent = !string.IsNullOrEmpty(item.Schema)
             ? JsonYamlFormatter.FormatAsYaml(item.Schema, mut)
             : $"[{mut}](no schema)[/]";

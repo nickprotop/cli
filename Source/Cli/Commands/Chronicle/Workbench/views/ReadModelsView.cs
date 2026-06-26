@@ -4,6 +4,7 @@
 using SharpConsoleUI;
 using SharpConsoleUI.Controls;
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -34,13 +35,16 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
     protected override string DetailPanelHeader => "READ MODEL";
 
     /// <inheritdoc/>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Mauve;
+    protected override ColorRole DetailColorRole => ColorRole.Secondary;
 
     /// <inheritdoc/>
-    public override IWindowControl BuildContent(ConsoleWindowSystem windowSystem)
+    protected override string? PageTitle => "READ MODELS";
+
+    /// <inheritdoc/>
+    public override void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem)
     {
         _windowSystem = windowSystem;
-        return base.BuildContent(windowSystem);
+        base.PopulateContent(panel, windowSystem);
     }
 
     /// <summary>
@@ -65,9 +69,9 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
             return;
         }
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var suc = WorkbenchColors.Success.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
+        var suc = Theme.Success.ToMarkup();
         var queryableColor = rm.IsQueryable ? suc : mut;
 
         var infoContent = string.Join(
@@ -135,12 +139,12 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a read model.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select a read model.[/]";
         }
 
-        var acc = WorkbenchColors.Accent.ToMarkup();
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var suc = WorkbenchColors.Success.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
+        var suc = Theme.Success.ToMarkup();
         var queryableColor = item.IsQueryable ? suc : mut;
 
         return string.Join(
@@ -181,8 +185,8 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
 
     async Task<string> FetchInstancesContentAsync(WorkbenchReadModel rm)
     {
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var dan = WorkbenchColors.Danger.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
+        var dan = Theme.Danger.ToMarkup();
 
         if (OnFetchInstances is null)
         {

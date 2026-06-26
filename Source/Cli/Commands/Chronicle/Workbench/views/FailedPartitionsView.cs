@@ -1,7 +1,9 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
+using SharpConsoleUI.Controls;
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -58,34 +60,88 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
     protected override string DetailPanelHeader => "FAILED PARTITION";
 
     /// <inheritdoc/>
-    protected override SharpConsoleUI.Color DetailBorderColor => WorkbenchColors.Danger;
+    protected override ColorRole DetailColorRole => ColorRole.Danger;
 
     /// <inheritdoc/>
     protected override bool HasCheckboxMode => true;
 
     /// <inheritdoc/>
-    protected override IReadOnlyList<ViewAction> GetAvailableActions(FailedPartition item)
+    protected override string? PageTitle => "FAILURES";
+
+    /// <inheritdoc/>
+    protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];
         if (OnRetryPartition is not null)
         {
-            actions.Add(new ViewAction("Retry partition", "T", ConsoleKey.T, default, () => OnRetryPartition(item)));
+            actions.Add(new ViewAction(
+                "Retry partition",
+                "T",
+                ConsoleKey.T,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnRetryPartition(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
         if (OnReplayPartition is not null)
         {
-            actions.Add(new ViewAction("Replay partition", "P", ConsoleKey.P, default, () => OnReplayPartition(item)));
+            actions.Add(new ViewAction(
+                "Replay partition",
+                "P",
+                ConsoleKey.P,
+                default,
+                () =>
+                {
+                    if (SelectedItem is { } it)
+                    {
+                        OnReplayPartition(it);
+                    }
+                },
+                Enabled: SelectedItem is not null));
         }
 
-        var checkedItems = Checked;
-        if (OnRetryAll is not null && checkedItems.Count > 1)
+        if (OnRetryAll is not null)
         {
-            actions.Add(new ViewAction($"Retry {checkedItems.Count} checked", null, null, default, () => OnRetryAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Retry {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnRetryAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
-        if (OnReplayAll is not null && checkedItems.Count > 1)
+        if (OnReplayAll is not null)
         {
-            actions.Add(new ViewAction($"Replay {checkedItems.Count} checked", null, null, default, () => OnReplayAll(checkedItems)));
+            var checkedItems = Checked;
+            actions.Add(new ViewAction(
+                $"Replay {checkedItems.Count} checked",
+                null,
+                null,
+                default,
+                () =>
+                {
+                    var items = Checked;
+                    if (items.Count > 1)
+                    {
+                        OnReplayAll(items);
+                    }
+                },
+                Enabled: checkedItems.Count > 1));
         }
 
         return actions;
@@ -107,12 +163,12 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
     {
         if (item is null)
         {
-            return $"[{WorkbenchColors.Muted.ToMarkup()}]Select a failed partition.[/]";
+            return $"[{Theme.Muted.ToMarkup()}]Select a failed partition.[/]";
         }
 
-        var mut = WorkbenchColors.Muted.ToMarkup();
-        var dan = WorkbenchColors.Danger.ToMarkup();
-        var acc = WorkbenchColors.Accent.ToMarkup();
+        var mut = Theme.Muted.ToMarkup();
+        var dan = Theme.Danger.ToMarkup();
+        var acc = Theme.Accent.ToMarkup();
 
         var lines = new List<string>
         {
