@@ -5,6 +5,7 @@ using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
 using SharpConsoleUI.Drawing;
+using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
 using SharpConsoleUI.Themes;
 using SRectangle = System.Drawing.Rectangle;
@@ -69,7 +70,11 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
 
         DismissOnOutsideClick = true;
         BorderStyle = BoxChars.Rounded;
-        BorderColor = theme.Accent;
+
+        // A heavily-dimmed accent — the accent blended most of the way to the background — so the chrome
+        // (border and the two internal divider rules) reads as quiet and the content holds the eye.
+        var dimChrome = theme.Accent.Mix(theme.Background, 0.8);
+        BorderColor = dimChrome;
         BorderBackgroundColor = theme.Surface;
         BackgroundColor = theme.Surface;
         ForegroundColor = theme.Foreground;
@@ -81,7 +86,7 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
         AddChild(searchInput);
 
         AddChild(Controls.RuleBuilder()
-            .WithColorRole(ColorRole.Primary)
+            .WithColor(dimChrome)
             .Build());
 
         _list = Controls.List()
@@ -94,7 +99,7 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
         AddChild(_list);
 
         AddChild(Controls.RuleBuilder()
-            .WithColorRole(ColorRole.Primary)
+            .WithColor(dimChrome)
             .StickyBottom()
             .Build());
 

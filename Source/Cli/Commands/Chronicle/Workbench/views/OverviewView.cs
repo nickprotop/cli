@@ -4,6 +4,7 @@
 using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
+using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
 using SharpConsoleUI.Themes;
 
@@ -16,8 +17,13 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// </summary>
 public class OverviewView : IWorkbenchView
 {
-    readonly Queue<double> _observerHistory = new(capacity: 10);
-    readonly Queue<double> _eventHistory = new(capacity: 20);
+    /// <summary>
+    /// History length for the sparklines. Generous so the auto-fitting graphs fill the full panel
+    /// width — the control renders only as many bars as it has data points.
+    /// </summary>
+    const int HistoryCap = 64;
+    readonly Queue<double> _observerHistory = new(capacity: HistoryCap);
+    readonly Queue<double> _eventHistory = new(capacity: HistoryCap);
     ulong? _lastSeenTail;
     ConsoleWindowSystem? _windowSystem;
     WorkbenchTheme? _themeInstance;
@@ -117,16 +123,23 @@ public class OverviewView : IWorkbenchView
             .Build();
 
         // ── Observer activity sparkline, boxed in a panel to match the tiles ───────────────────────
+        // AutoFitDataPoints makes the bars fill the full panel width; an explicit min/max range keeps a
+        // constant series from filling the entire height (it sits at its proportional level with headroom).
+        // A theme-derived vertical gradient (dim accent → bright accent) makes the bars glow toward the top.
         _observerSparkline = new SparklineBuilder()
             .WithColorRole(ColorRole.Primary)
+            .WithGradient(ColorGradient.FromColors(Theme.DimAccent, Theme.Accent))
+            .WithAutoFitDataPoints()
+            .WithMinValue(0)
             .WithData([0])
             .Build();
 
+        // Top padding gives the bars breathing room below the header.
         _activityPanel = Controls.Panel()
             .WithHeader(" OBSERVERS OVER TIME ")
             .Rounded()
             .WithColorRole(ColorRole.Primary)
-            .WithPadding(1, 0, 1, 0)
+            .WithPadding(1, 1, 1, 0)
             .FillVertical()
             .AddControl(_observerSparkline)
             .WithName("OverviewActivityPanel")
@@ -135,6 +148,9 @@ public class OverviewView : IWorkbenchView
         // ── Event throughput sparkline (new events per refresh tick) ───────────────────────────────
         _throughputSparkline = new SparklineBuilder()
             .WithColorRole(ColorRole.Info)
+            .WithGradient(ColorGradient.FromColors(Theme.DimAccent, Theme.Teal))
+            .WithAutoFitDataPoints()
+            .WithMinValue(0)
             .WithData([0])
             .Build();
 
@@ -217,22 +233,22 @@ public class OverviewView : IWorkbenchView
             : $"[{mut}]—[/]";
 
         _healthPanel.Content =
-            "[bold]CONTEXT[/]\n" +
-            $"  [{mut}]Store[/]     [{acc}]{data.EventStore}[/]\n" +
-            $"  [{mut}]Namespace[/] [{acc}]{data.Namespace}[/]\n" +
+            $"{connStatus}   [{mut}]{version}[/]\n" +
             "\n" +
-            $"[{mut}]Status[/]   {connStatus}\n" +
-            $"[{mut}]Version[/]  {version}\n" +
-            $"[{mut}]Tail seq[/] {seq}\n" +
-            $"[{mut}]Server[/]   [{mut}]{data.ConnectionString}[/]\n" +
+            $"[{acc}][bold]CONTEXT[/][/]\n" +
+            $"  [{mut}]Store[/]      [bold]{data.EventStore}[/]\n" +
+            $"  [{mut}]Namespace[/]  [bold]{data.Namespace}[/]\n" +
+            $"  [{mut}]Tail seq[/]   {seq}\n" +
             "\n" +
-            "[bold]CATALOG[/]\n" +
-            $"  [{mut}]Event Types[/]   [bold]{data.EventTypeRegistrations.Count}[/]\n" +
-            $"  [{mut}]Projections[/]   [bold]{data.ProjectionDefinitions.Count}[/]\n" +
-            $"  [{mut}]Read Models[/]   [bold]{data.ReadModelDefinitions.Count}[/]\n" +
-            $"  [{mut}]Subscriptions[/] [bold]{data.EventStoreSubscriptions.Count}[/]\n" +
+            $"[{acc}][bold]CATALOG[/][/]\n" +
+            $"  [bold]{data.EventTypeRegistrations.Count,4}[/] [{mut}]event types[/]\n" +
+            $"  [bold]{data.ProjectionDefinitions.Count,4}[/] [{mut}]projections[/]\n" +
+            $"  [bold]{data.ReadModelDefinitions.Count,4}[/] [{mut}]read models[/]\n" +
+            $"  [bold]{data.EventStoreSubscriptions.Count,4}[/] [{mut}]subscriptions[/]\n" +
             "\n" +
-            $"[{mut}]updated {FormatAge(data.CapturedAt)}[/]";
+            $"[{mut}]{data.ConnectionString}[/]\n" +
+            "\n" +
+            $"[{mut}]⟳ updated {FormatAge(data.CapturedAt)}[/]";
 
         // ── Observers tile ─────────────────────────────────────────────────────────────────────────
         ColorRole observersRole;
@@ -246,36 +262,37 @@ public class OverviewView : IWorkbenchView
         else if (data.ReplayingObservers > 0) obsColor = war;
         else obsColor = suc;
 
+        // Hero number (the total) on the headline row, then a compact, color-coded state breakdown.
+        // Zero-count states are dimmed so the eye lands on what is actually present.
+        string ObsStat(string glyph, string color, int n, string label) =>
+            n > 0
+                ? $"[{color}]{glyph}[/] [bold]{n}[/] [{mut}]{label}[/]"
+                : $"[{mut}]{glyph} {n} {label}[/]";
+
         _observersTile.Content =
-            $"[{suc}]●[/] Active       [bold]{data.ActiveObservers}[/]\n" +
-            $"[{war}]▲[/] Replaying    [bold]{data.ReplayingObservers}[/]\n" +
-            $"[{mut}]○[/] Suspended    [bold]{data.SuspendedObservers}[/]\n" +
-            $"[{dan}]⊘[/] Disconnected [bold]{data.DisconnectedObservers}[/]\n" +
-            $"[{mut}]━[/] Total        [{obsColor}][bold]{data.Observers.Count}[/][/]";
+            $"[{obsColor}][bold]{data.Observers.Count}[/][/] [{mut}]observers[/]\n" +
+            "\n" +
+            $"{ObsStat("●", suc, data.ActiveObservers, "active")}   {ObsStat("▲", war, data.ReplayingObservers, "replaying")}\n" +
+            $"{ObsStat("○", mut, data.SuspendedObservers, "suspended")}   {ObsStat("⊘", dan, data.DisconnectedObservers, "disconnected")}";
 
         // ── Failures tile ──────────────────────────────────────────────────────────────────────────
-        _failuresTile!.ColorRole = data.FailedPartitions.Count > 0
-            ? ColorRole.Danger
-            : ColorRole.Primary;
-
+        // Hero stat: a big green ✓ when healthy, a big danger count + call-to-action when not.
+        _failuresTile!.ColorRole = data.FailedPartitions.Count > 0 ? ColorRole.Danger : ColorRole.Primary;
         _failuresTile.Content = data.FailedPartitions.Count > 0
-            ? $"[{dan}]⚠[/] [bold]{data.FailedPartitions.Count}[/] failed partition{(data.FailedPartitions.Count == 1 ? string.Empty : "s")}\n[{mut}]→ press 3[/]"
-            : $"[{suc}]✓[/] No failed partitions";
+            ? $"[{dan}][bold]{data.FailedPartitions.Count}[/][/] [{mut}]failed partition{(data.FailedPartitions.Count == 1 ? string.Empty : "s")}[/]\n\n[{dan}]⚠[/] [{mut}]needs attention[/]   [{acc}]press 3[/]"
+            : $"[{suc}][bold]✓[/][/] [{mut}]all partitions healthy[/]";
 
         // ── Recommendations tile ───────────────────────────────────────────────────────────────────
-        _recommendationsTile!.ColorRole = data.Recommendations.Count > 0
-            ? ColorRole.Warning
-            : ColorRole.Primary;
-
+        _recommendationsTile!.ColorRole = data.Recommendations.Count > 0 ? ColorRole.Warning : ColorRole.Primary;
         _recommendationsTile.Content = data.Recommendations.Count > 0
-            ? $"[{war}]![/] [bold]{data.Recommendations.Count}[/] pending recommendation{(data.Recommendations.Count == 1 ? string.Empty : "s")}\n[{mut}]→ press 5[/]"
-            : $"[{suc}]✓[/] No pending recommendations";
+            ? $"[{war}][bold]{data.Recommendations.Count}[/][/] [{mut}]pending recommendation{(data.Recommendations.Count == 1 ? string.Empty : "s")}[/]\n\n[{war}]![/] [{mut}]review suggested[/]   [{acc}]press 5[/]"
+            : $"[{suc}][bold]✓[/][/] [{mut}]no recommendations[/]";
 
         // ── Jobs tile ──────────────────────────────────────────────────────────────────────────────
         _jobsTile!.ColorRole = ColorRole.Primary;
         _jobsTile.Content = data.Jobs.Count > 0
-            ? $"[bold]{data.Jobs.Count}[/] [{mut}]running[/]"
-            : $"[{suc}]✓[/] No jobs running";
+            ? $"[{acc}][bold]{data.Jobs.Count}[/][/] [{mut}]job{(data.Jobs.Count == 1 ? string.Empty : "s")} running[/]"
+            : $"[{suc}][bold]✓[/][/] [{mut}]no jobs running[/]";
 
         // ── Graphs (observers over time, event throughput, top event types) ────────────────────────
         UpdateObserverSparkline(data.Observers.Count);
@@ -299,11 +316,15 @@ public class OverviewView : IWorkbenchView
         if (_observerSparkline is null) return;
 
         _observerHistory.Enqueue(totalObservers);
-        while (_observerHistory.Count > 10)
+        while (_observerHistory.Count > HistoryCap)
         {
             _observerHistory.Dequeue();
         }
 
+        // Give the series ~25% headroom above its peak so a steady value reads as a mid-height flat
+        // line (not a solid full-height block) and a rise has room to climb into.
+        var peak = _observerHistory.Count > 0 ? _observerHistory.Max() : 0;
+        _observerSparkline.MaxValue = Math.Max(1, Math.Ceiling(peak * 1.25));
         _observerSparkline.SetDataPoints(_observerHistory);
     }
 
@@ -327,7 +348,7 @@ public class OverviewView : IWorkbenchView
         }
 
         _eventHistory.Enqueue(delta);
-        while (_eventHistory.Count > 20)
+        while (_eventHistory.Count > HistoryCap)
         {
             _eventHistory.Dequeue();
         }
