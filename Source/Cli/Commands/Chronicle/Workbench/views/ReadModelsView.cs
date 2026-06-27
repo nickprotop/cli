@@ -139,7 +139,7 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a read model.[/]";
+            return SelectPrompt("a read model");
         }
 
         var acc = Theme.Accent.ToMarkup();
@@ -181,7 +181,7 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
     ];
 
     /// <inheritdoc/>
-    protected override void OnRowActivated(WorkbenchReadModel item) => OpenDetailOverlay(item);
+    protected override void OnInspect(WorkbenchReadModel item) => OpenDetailOverlay(item);
 
     async Task<string> FetchInstancesContentAsync(WorkbenchReadModel rm)
     {

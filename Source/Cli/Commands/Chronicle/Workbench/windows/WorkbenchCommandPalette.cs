@@ -39,6 +39,7 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
     readonly IReadOnlyList<(string Kind, string Label, string SearchKey, Action Navigate)> _allItems;
     readonly ListControl _list;
     readonly int _maxVisible;
+    readonly string _mutedMarkup;
 
     /// <summary>
     /// Initializes a new instance of <see cref="WorkbenchCommandPalette"/> with a pre-computed set
@@ -64,6 +65,7 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
         int windowHeight)
     {
         _allItems = items;
+        _mutedMarkup = theme.Muted.ToMarkup();
 
         DismissOnOutsideClick = true;
         BorderStyle = BoxChars.Rounded;
@@ -97,7 +99,7 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
             .Build());
 
         AddChild(Controls.Markup()
-            .AddLine("[grey50]↑↓ select · Enter open · Esc close[/]")
+            .AddLine($"[{_mutedMarkup}]↑↓ select · Enter open · Esc close[/]")
             .WithAlignment(SharpConsoleUI.Layout.HorizontalAlignment.Center)
             .StickyBottom()
             .Build());
@@ -218,7 +220,7 @@ public sealed class WorkbenchCommandPalette : PortalContentContainer
         foreach (var (kind, label, _, navigate) in filtered)
         {
             var captured = navigate;
-            _list.AddItem(new ListItem($"[grey50]{kind,-14}[/]  {label}") { Tag = captured });
+            _list.AddItem(new ListItem($"[{_mutedMarkup}]{kind,-14}[/]  {label}") { Tag = captured });
         }
 
         if (_list.Items.Count > 0)

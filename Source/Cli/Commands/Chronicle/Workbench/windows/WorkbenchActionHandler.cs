@@ -103,37 +103,43 @@ public class WorkbenchActionHandler(ConsoleWindowSystem windowSystem, Action<str
             .AddEmptyLine()
             .Build();
 
-        // Content-sized height: chrome (border + title + padding) plus body lines.
+        // Content-sized height: chrome (border, title, rule + toolbar) plus body lines.
         var listLines = affected.Count == 0 ? 0 : Math.Min(affected.Count, MaxAffectedListed) + (affected.Count > MaxAffectedListed ? 1 : 0) + 2;
-        var height = 9 + listLines;
+        var height = 12 + listLines;
 
-        Window? dialog = null;
-        dialog = new WindowBuilder(windowSystem)
-            .WithTitle(" ⚠ Confirm ")
-            .WithSize(64, height)
-            .Centered()
-            .WithActiveBorderColor(_theme.Danger)
-            .AddControl(body)
-            .OnKeyPressed((_, e) =>
+        var dialog = WorkbenchUi.BuildDialog(
+            windowSystem,
+            _theme,
+            "⚠ Confirm",
+            [body],
+            [new DialogButton("Confirm", ColorRole.Danger, () => RunAction(description, action))],
+            new DialogOptions
             {
-                switch (e.KeyInfo.Key)
-                {
-                    // Cancel-focused: only an explicit Y confirms; Enter cancels (safe default).
-                    case ConsoleKey.Y:
-                        windowSystem.CloseWindow(dialog, activateParent: true, force: false);
-                        RunAction(description, action);
-                        e.Handled = true;
-                        break;
+                Severity = DialogSeverity.Danger,
+                Width = 64,
+                Height = height,
 
-                    case ConsoleKey.Enter:
-                    case ConsoleKey.Escape:
-                    case ConsoleKey.N:
-                        windowSystem.CloseWindow(dialog, activateParent: true, force: false);
-                        e.Handled = true;
-                        break;
+                // Cancel-focused safety contract: only an explicit Y confirms; Enter / Esc / N cancel.
+                // The toolbar Confirm button and the Y key both run the action; "Close" is the cancel.
+                OnKey = (key, close) =>
+                {
+                    switch (key.Key)
+                    {
+                        case ConsoleKey.Y:
+                            close();
+                            RunAction(description, action);
+                            return true;
+
+                        case ConsoleKey.Enter:
+                        case ConsoleKey.N:
+                            close();
+                            return true;
+
+                        default:
+                            return false;
+                    }
                 }
-            })
-            .Build();
+            });
 
         windowSystem.AddWindow(dialog, activateWindow: true);
     }

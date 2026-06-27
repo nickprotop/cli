@@ -77,6 +77,15 @@ public class WorkbenchKeyDispatcher(
 
         var idx = navigation.CurrentViewIndex;
 
+        // The help key is '?'. Terminals report it as a bare character (Key=NoName, no Shift modifier),
+        // not as ConsoleKey.Oem2+Shift, so match on the character rather than the key code.
+        if (e.KeyInfo.KeyChar == '?')
+        {
+            overlays.OpenHelpOverlay();
+            e.Handled = true;
+            return;
+        }
+
         switch (e.KeyInfo.Key)
         {
             // Left/Right: only act when the focused control did NOT already handle them.
@@ -130,17 +139,16 @@ public class WorkbenchKeyDispatcher(
                 e.Handled = true;
                 break;
 
-            case ConsoleKey.Oem2 when e.KeyInfo.Modifiers == ConsoleModifiers.Shift:
-                if (!e.AlreadyHandled)
-                {
-                    overlays.OpenHelpOverlay();
-                    e.Handled = true;
-                }
-
-                break;
-
             case ConsoleKey.P when e.KeyInfo.Modifiers.HasFlag(ConsoleModifiers.Control):
                 overlays.OpenCommandPalette();
+                e.Handled = true;
+                break;
+
+            // Number keys 1-9 jump to that view by its 1-based position in the nav list (1 = Overview,
+            // 2 = Observers, 3 = Failures, ...). Matches the "→ press 3" affordances on the dashboard.
+            case >= ConsoleKey.D1 and <= ConsoleKey.D9 when !e.AlreadyHandled:
+            case >= ConsoleKey.NumPad1 and <= ConsoleKey.NumPad9 when !e.AlreadyHandled:
+                JumpToViewByNumber(e.KeyInfo.Key);
                 e.Handled = true;
                 break;
 
@@ -336,8 +344,12 @@ public class WorkbenchKeyDispatcher(
             return false;
         }
 
+        // Letter shortcuts must fire whether typed lower- or upper-case. Terminals report an uppercase
+        // letter as the same ConsoleKey plus a Shift modifier, so ignore Shift when matching and only
+        // require the meaningful modifiers (Control / Alt) to agree.
+        const ConsoleModifiers meaningful = ConsoleModifiers.Control | ConsoleModifiers.Alt;
         var match = views[idx].ViewActions.FirstOrDefault(
-            a => a.TriggerKey == key && a.TriggerModifiers == modifiers && a.Enabled);
+            a => a.TriggerKey == key && (a.TriggerModifiers & meaningful) == (modifiers & meaningful) && a.Enabled);
 
         if (match is null)
         {
@@ -354,6 +366,22 @@ public class WorkbenchKeyDispatcher(
         if (index >= 0 && index < slots.Count)
         {
             slots[index].Apply();
+        }
+    }
+
+    /// <summary>
+    /// Jumps to the view at the 1-based nav position encoded by a number key (D1/NumPad1 = first view).
+    /// </summary>
+    /// <param name="key">The number key pressed.</param>
+    void JumpToViewByNumber(ConsoleKey key)
+    {
+        var digit = key is >= ConsoleKey.NumPad1 and <= ConsoleKey.NumPad9
+            ? key - ConsoleKey.NumPad1
+            : key - ConsoleKey.D1;
+
+        if (digit >= 0 && digit < views.Length)
+        {
+            navigation.NavigateTo(digit);
         }
     }
 }

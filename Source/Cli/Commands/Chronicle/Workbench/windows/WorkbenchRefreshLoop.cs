@@ -109,8 +109,6 @@ public class WorkbenchRefreshLoop(
                 _currentData = data;
             }
 
-            PushDataToViews(data);
-
             if (_wasDisconnected && data.IsConnected)
             {
                 _ = Task.Run(
@@ -125,9 +123,16 @@ public class WorkbenchRefreshLoop(
 
             _wasDisconnected = !data.IsConnected;
 
-            UpdateTopPanel(data);
-            UpdateStatusBar(data);
-            navigation.UpdateNavBadges(data);
+            // The refresh loop runs on a background window thread, so marshal every UI mutation onto the
+            // UI thread. Touching controls off-thread races with the render loop and can deactivate an
+            // open overlay (e.g. the right-click context menu, which closes on deactivation).
+            windowSystem.EnqueueOnUIThread(() =>
+            {
+                PushDataToViews(data);
+                UpdateTopPanel(data);
+                UpdateStatusBar(data);
+                navigation.UpdateNavBadges(data);
+            });
         }
         catch (OperationCanceledException)
         {
@@ -145,7 +150,11 @@ public class WorkbenchRefreshLoop(
     public void ShowTemporaryMessage(string text)
     {
         SetPanelText(text);
-        _ = Task.Delay(2000).ContinueWith(_ => UpdateTopPanel(CurrentData), TaskScheduler.Default);
+
+        // The continuation runs on a thread-pool thread, so marshal the UI update onto the UI thread.
+        _ = Task.Delay(2000).ContinueWith(
+            _ => windowSystem.EnqueueOnUIThread(() => UpdateTopPanel(CurrentData)),
+            TaskScheduler.Default);
     }
 
     /// <summary>
@@ -167,8 +176,8 @@ public class WorkbenchRefreshLoop(
         var connDot = data.IsConnected ? "●" : "○";
         var seqText = data.TailSequenceNumber.HasValue ? $"  seq#{data.TailSequenceNumber.Value:N0}" : string.Empty;
 
-        windowSystem.PanelStateService.TopStatus =
-            $"◆ CHRONICLE WORKBENCH  ·  {host}  ·  {eventStore}/{ns}  ·  ↻{settings.Interval}s{seqText}  {connDot}";
+        SetPanelText(
+            $"◆ CHRONICLE WORKBENCH  ·  {host}  ·  {eventStore}/{ns}  ·  ↻{settings.Interval}s{seqText}  {connDot}");
     }
 
     /// <summary>
@@ -222,5 +231,5 @@ public class WorkbenchRefreshLoop(
     }
 
     void SetPanelText(string text) =>
-        windowSystem.PanelStateService.TopStatus = text;
+        windowSystem.EnqueueOnUIThread(() => windowSystem.PanelStateService.TopStatus = text);
 }

@@ -4,6 +4,7 @@
 using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
+using SharpConsoleUI.Themes;
 using UITableRow = SharpConsoleUI.Controls.TableRow;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
@@ -244,7 +245,10 @@ public class WorkbenchNavigation(
                 : string.Empty;
         }
 
-        _navView?.Invalidate();
+        // No explicit Invalidate: NavigationItem.Subtitle is reactive — its setter self-invalidates
+        // only when a value actually changes. Forcing an unconditional relayout here every tick is
+        // redundant and (because a window relayout currently drops open portals) would close the
+        // command palette on each refresh while no badge has changed.
     }
 
     /// <summary>Opens a modal picker that lets the user select a different event store.</summary>
@@ -366,10 +370,10 @@ public class WorkbenchNavigation(
     {
         foreach (var (header, accent) in _sectionHeaders)
         {
+            // NavigationItem.HeaderColor is reactive — its setter self-invalidates when the value
+            // changes, so no explicit Invalidate is needed (an unconditional one would be anti-reactive).
             header.HeaderColor = theme.SectionAccent(accent);
         }
-
-        _navView?.Invalidate();
     }
 
     void ShowStringPickerOverlay(
@@ -395,31 +399,48 @@ public class WorkbenchNavigation(
             pickerTable.AddRow(new UITableRow([label]) { Tag = name });
         }
 
-        Window? picker = null;
+        pickerTable.VerticalAlignment = SharpConsoleUI.Layout.VerticalAlignment.Fill;
         var height = Math.Min(items.Count + PickerOverlayHeightPadding, MaxPickerOverlayHeight);
-        picker = new WindowBuilder(windowSystem)
-            .WithTitle(title)
-            .WithSize(PickerOverlayWidth, height)
-            .Centered()
-            .AddControl(pickerTable)
-            .OnKeyPressed((_, ke) =>
-            {
-                if (ke.KeyInfo.Key == ConsoleKey.Escape)
-                {
-                    windowSystem.CloseWindow(picker, activateParent: true, force: false);
-                    ke.Handled = true;
-                }
-            })
-            .Build();
 
-        pickerTable.RowActivated += (_, _) =>
+        Window? picker = null;
+        void SelectCurrent()
         {
             if (pickerTable.SelectedRow?.Tag is string selected)
             {
-                windowSystem.CloseWindow(picker, activateParent: true, force: false);
+                if (picker is not null)
+                {
+                    windowSystem.CloseWindow(picker, activateParent: true, force: false);
+                }
+
                 onSelected(selected);
             }
-        };
+        }
+
+        picker = WorkbenchUi.BuildDialog(
+            windowSystem,
+            theme,
+            title,
+            [pickerTable],
+            [new DialogButton("Select", ColorRole.Primary, SelectCurrent)],
+            new DialogOptions
+            {
+                FillBody = true,
+                CloseOnAction = false,
+                Width = PickerOverlayWidth,
+                Height = height,
+                OnKey = (key, _) =>
+                {
+                    if (key.Key == ConsoleKey.Enter)
+                    {
+                        SelectCurrent();
+                        return true;
+                    }
+
+                    return false;
+                }
+            });
+
+        pickerTable.RowActivated += (_, _) => SelectCurrent();
 
         windowSystem.AddWindow(picker, activateWindow: true);
     }

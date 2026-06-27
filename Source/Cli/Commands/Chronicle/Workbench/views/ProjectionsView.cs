@@ -43,7 +43,7 @@ public class ProjectionsView : FilterableTableView<ProjectionDefinition>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a projection.[/]";
+            return SelectPrompt("a projection");
         }
 
         var acc = Theme.Accent.ToMarkup();

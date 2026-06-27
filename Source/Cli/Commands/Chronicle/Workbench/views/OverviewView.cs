@@ -16,16 +16,9 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// </summary>
 public class OverviewView : IWorkbenchView
 {
-    /// <summary>Width of the navigation rail (matches WorkbenchNavigation.WithNavWidth).</summary>
-    const int NavRailWidth = 28;
-
-    /// <summary>Horizontal chrome (rounded content border + padding) around the content area.</summary>
-    const int ContentChromeWidth = 4;
-
-    /// <summary>Vertical chrome (top/bottom bars + content border) around the content area.</summary>
-    const int ContentChromeHeight = 10;
-
     readonly Queue<double> _observerHistory = new(capacity: 10);
+    readonly Queue<double> _eventHistory = new(capacity: 20);
+    ulong? _lastSeenTail;
     ConsoleWindowSystem? _windowSystem;
     WorkbenchTheme? _themeInstance;
     PanelControl? _healthPanel;
@@ -34,8 +27,11 @@ public class OverviewView : IWorkbenchView
     PanelControl? _recommendationsTile;
     PanelControl? _jobsTile;
     SparklineControl? _observerSparkline;
-    GridControl? _outerGrid;
-    GridControl? _rightGrid;
+    PanelControl? _activityPanel;
+    SparklineControl? _throughputSparkline;
+    PanelControl? _throughputPanel;
+    PanelControl? _topTypesPanel;
+    GridControl? _grid;
     WorkbenchData? _pendingData;
 
     /// <inheritdoc/>
@@ -46,26 +42,24 @@ public class OverviewView : IWorkbenchView
     /// <inheritdoc/>
     public void Dispose()
     {
-        UnsubscribeFromResize();
-
         _healthPanel?.Dispose();
         _observersTile?.Dispose();
         _failuresTile?.Dispose();
         _recommendationsTile?.Dispose();
         _jobsTile?.Dispose();
         _observerSparkline?.Dispose();
-        _rightGrid?.Dispose();
-        _outerGrid?.Dispose();
+        _activityPanel?.Dispose();
+        _throughputSparkline?.Dispose();
+        _throughputPanel?.Dispose();
+        _topTypesPanel?.Dispose();
+        _grid?.Dispose();
     }
 
     /// <inheritdoc/>
     public void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem)
     {
-        // PopulateContent runs on every navigation to this view, so release the previous build's
-        // resize subscription and controls first to avoid duplicate handlers and leaked controls.
-        UnsubscribeFromResize();
-        _rightGrid?.Dispose();
-        _outerGrid?.Dispose();
+        // PopulateContent runs on every navigation to this view, so release the previous build first.
+        _grid?.Dispose();
 
         _windowSystem = windowSystem;
         _themeInstance = new WorkbenchTheme(windowSystem);
@@ -88,6 +82,7 @@ public class OverviewView : IWorkbenchView
             .Rounded()
             .WithColorRole(ColorRole.Primary)
             .WithPadding(1, 0, 1, 0)
+            .FillVertical()
             .WithName("OverviewObserversTile")
             .Build();
 
@@ -97,6 +92,7 @@ public class OverviewView : IWorkbenchView
             .Rounded()
             .WithColorRole(ColorRole.Primary)
             .WithPadding(1, 0, 1, 0)
+            .FillVertical()
             .WithName("OverviewFailuresTile")
             .Build();
 
@@ -106,6 +102,7 @@ public class OverviewView : IWorkbenchView
             .Rounded()
             .WithColorRole(ColorRole.Primary)
             .WithPadding(1, 0, 1, 0)
+            .FillVertical()
             .WithName("OverviewRecommendationsTile")
             .Build();
 
@@ -115,56 +112,77 @@ public class OverviewView : IWorkbenchView
             .Rounded()
             .WithColorRole(ColorRole.Primary)
             .WithPadding(1, 0, 1, 0)
+            .FillVertical()
             .WithName("OverviewJobsTile")
             .Build();
 
-        // ── Observer activity sparkline (spans bottom of the right area) ───────────────────────────
+        // ── Observer activity sparkline, boxed in a panel to match the tiles ───────────────────────
         _observerSparkline = new SparklineBuilder()
-            .WithHeight(3)
             .WithColorRole(ColorRole.Primary)
-            .WithTitle("observer activity", Theme.Muted)
             .WithData([0])
             .Build();
 
-        // ── Right inner grid: 2 cols × 4 rows (2×2 tiles + sparkline band + slack) ─────────────────
-        _rightGrid = Controls.Grid()
-            .Columns(GridLength.Star(1), GridLength.Star(1))
+        _activityPanel = Controls.Panel()
+            .WithHeader(" OBSERVER ACTIVITY ")
+            .Rounded()
+            .WithColorRole(ColorRole.Primary)
+            .WithPadding(1, 0, 1, 0)
+            .FillVertical()
+            .AddControl(_observerSparkline)
+            .WithName("OverviewActivityPanel")
+            .Build();
 
-            // Tile rows are fixed-height (compact); the sparkline gets a fixed band too so it does not
-            // balloon into a tall sparse column. The trailing Star row absorbs the remaining height as
-            // empty space, keeping the dashboard top-aligned.
-            .Rows(GridLength.Cells(7), GridLength.Cells(7), GridLength.Cells(5), GridLength.Star(1))
+        // ── Event throughput sparkline (new events per refresh tick) ───────────────────────────────
+        _throughputSparkline = new SparklineBuilder()
+            .WithColorRole(ColorRole.Info)
+            .WithData([0])
+            .Build();
+
+        _throughputPanel = Controls.Panel()
+            .WithHeader(" EVENT THROUGHPUT ")
+            .Rounded()
+            .WithColorRole(ColorRole.Info)
+            .WithPadding(1, 0, 1, 0)
+            .FillVertical()
+            .AddControl(_throughputSparkline)
+            .WithName("OverviewThroughputPanel")
+            .Build();
+
+        // ── Top event types bar list (from RecentEvents) ───────────────────────────────────────────
+        _topTypesPanel = Controls.Panel()
+            .WithContent("Loading...")
+            .WithHeader(" TOP EVENT TYPES ")
+            .Rounded()
+            .WithColorRole(ColorRole.Info)
+            .WithPadding(1, 0, 1, 0)
+            .FillVertical()
+            .WithName("OverviewTopTypesPanel")
+            .Build();
+
+        // ── Dashboard grid (single GridControl, added directly to the panel) ───────────────────────
+        // Columns: health rail | tile/graph A | tile/graph B. Rows: two tile rows, an activity row,
+        // and a graph row. The health rail spans all four rows on the left.
+        // Rows: two tile rows, an activity row, a graph row — all fixed height — then a trailing Star
+        // row that absorbs the remaining height so the dashboard stays compact and top-aligned. The
+        // health rail spans the four content rows on the left.
+        _grid = Controls.Grid()
+            .Columns(GridLength.Star(1), GridLength.Star(1), GridLength.Star(1))
+            .Rows(GridLength.Cells(7), GridLength.Cells(7), GridLength.Cells(6), GridLength.Cells(8), GridLength.Star(1))
             .RowGap(1)
             .ColumnGap(1)
             .WithColorRole(ColorRole.Primary)
             .WithAlignment(SharpConsoleUI.Layout.HorizontalAlignment.Stretch)
             .WithVerticalAlignment(SharpConsoleUI.Layout.VerticalAlignment.Fill)
-            .Place(_observersTile, 0, 0)
-            .Place(_failuresTile, 0, 1)
-            .Place(_recommendationsTile, 1, 0)
-            .Place(_jobsTile, 1, 1)
-            .Place(_observerSparkline, 2, 0, colSpan: 2)
-            .Build();
-
-        // ── Outer grid: health rail (1*) | right tiles area (2*) ──────────────────────────────────
-        // GridControl.MeasureDOM returns LayoutSize.Zero — it does NOT measure-to-content, so when
-        // mounted as a panel child it would collapse to nothing. Give it an explicit size from the
-        // available content area, and re-apply it on terminal resize (subscription below).
-        var (contentWidth, contentHeight) = ContentSize();
-        _outerGrid = Controls.Grid()
-            .Columns(GridLength.Star(1), GridLength.Star(2))
-            .Rows(GridLength.Star(1))
-            .ColumnGap(1)
-            .WithColorRole(ColorRole.Primary)
-            .WithSize(contentWidth, contentHeight)
             .ColumnSplitterAfter(0)
-            .Place(_healthPanel, 0, 0)
-            .Place(_rightGrid, 0, 1)
+            .Place(_healthPanel, 0, 0, rowSpan: 5)
+            .Place(_observersTile, 0, 1)
+            .Place(_failuresTile, 0, 2)
+            .Place(_recommendationsTile, 1, 1)
+            .Place(_jobsTile, 1, 2)
+            .Place(_activityPanel, 2, 1, colSpan: 2)
+            .Place(_throughputPanel, 3, 1)
+            .Place(_topTypesPanel, 3, 2)
             .Build();
-
-        // The explicit size is computed from the terminal dimensions, so re-apply it whenever the
-        // terminal is resized — otherwise the dashboard would stay locked at its build-time size.
-        windowSystem.WindowResized += OnTerminalResized;
 
         if (_pendingData is not null)
         {
@@ -172,7 +190,7 @@ public class OverviewView : IWorkbenchView
         }
 
         panel.ClearContents();
-        panel.AddControl(_outerGrid);
+        panel.AddControl(_grid);
     }
 
     /// <inheritdoc/>
@@ -190,7 +208,7 @@ public class OverviewView : IWorkbenchView
         // ── Server Health rail ─────────────────────────────────────────────────────────────────────
         var connStatus = data.IsConnected
             ? $"[{suc}]● Connected[/]"
-            : $"[{dan}]● Disconnected[/]";
+            : $"[{dan}]○ Disconnected[/]";
         var version = data.ServerVersion is not null
             ? $"[{mut}]v{data.ServerVersion}[/]"
             : $"[{mut}]unknown[/]";
@@ -206,7 +224,15 @@ public class OverviewView : IWorkbenchView
             $"[{mut}]Status[/]   {connStatus}\n" +
             $"[{mut}]Version[/]  {version}\n" +
             $"[{mut}]Tail seq[/] {seq}\n" +
-            $"[{mut}]Server[/]   [{mut}]{data.ConnectionString}[/]";
+            $"[{mut}]Server[/]   [{mut}]{data.ConnectionString}[/]\n" +
+            "\n" +
+            "[bold]CATALOG[/]\n" +
+            $"  [{mut}]Event Types[/]   [bold]{data.EventTypeRegistrations.Count}[/]\n" +
+            $"  [{mut}]Projections[/]   [bold]{data.ProjectionDefinitions.Count}[/]\n" +
+            $"  [{mut}]Read Models[/]   [bold]{data.ReadModelDefinitions.Count}[/]\n" +
+            $"  [{mut}]Subscriptions[/] [bold]{data.EventStoreSubscriptions.Count}[/]\n" +
+            "\n" +
+            $"[{mut}]updated {FormatAge(data.CapturedAt)}[/]";
 
         // ── Observers tile ─────────────────────────────────────────────────────────────────────────
         ColorRole observersRole;
@@ -249,18 +275,22 @@ public class OverviewView : IWorkbenchView
         _jobsTile!.ColorRole = ColorRole.Primary;
         _jobsTile.Content = $"[bold]{data.Jobs.Count}[/]\n[{mut}]running[/]";
 
-        // ── Observer sparkline ─────────────────────────────────────────────────────────────────────
+        // ── Graphs (observer activity, event throughput, top event types) ──────────────────────────
         UpdateObserverSparkline(data.Observers.Count);
+        UpdateThroughput(data.TailSequenceNumber);
+        UpdateTopTypes(data, mut, Theme.Teal.ToMarkup());
     }
 
     /// <summary>
-    /// Computes the explicit content area size for the outer grid from the current terminal
-    /// dimensions, less the navigation rail and content-border chrome.
+    /// Formats how long ago a snapshot was captured, relative to now.
     /// </summary>
-    /// <returns>The width and height in character cells.</returns>
-    static (int Width, int Height) ContentSize() =>
-        (Math.Max(40, Console.WindowWidth - NavRailWidth - ContentChromeWidth),
-         Math.Max(10, Console.WindowHeight - ContentChromeHeight));
+    /// <param name="capturedAt">When the snapshot was captured.</param>
+    /// <returns>A short relative-time label such as "just now" or "12s ago".</returns>
+    static string FormatAge(DateTimeOffset capturedAt)
+    {
+        var seconds = (int)Math.Max(0, (DateTimeOffset.Now - capturedAt).TotalSeconds);
+        return seconds <= 1 ? "just now" : $"{seconds}s ago";
+    }
 
     void UpdateObserverSparkline(int totalObservers)
     {
@@ -276,33 +306,63 @@ public class OverviewView : IWorkbenchView
     }
 
     /// <summary>
-    /// Re-applies the explicit grid size when the terminal is resized, since the GridControl is
-    /// sized from the terminal dimensions rather than measuring its own content.
+    /// Tracks new events per refresh tick (tail-sequence delta) and feeds the throughput sparkline.
     /// </summary>
-    /// <param name="sender">The event source.</param>
-    /// <param name="size">The new terminal size.</param>
-    void OnTerminalResized(object? sender, SharpConsoleUI.Helpers.Size size)
+    /// <param name="tail">The current tail sequence number, or null when unavailable.</param>
+    void UpdateThroughput(ulong? tail)
     {
-        if (_outerGrid is null)
+        if (_throughputSparkline is null) return;
+
+        double delta = 0;
+        if (tail.HasValue)
         {
-            return;
+            if (_lastSeenTail.HasValue && tail.Value >= _lastSeenTail.Value)
+            {
+                delta = tail.Value - _lastSeenTail.Value;
+            }
+
+            _lastSeenTail = tail.Value;
         }
 
-        var (width, height) = ContentSize();
-        _outerGrid.Width = width;
-        _outerGrid.Height = height;
+        _eventHistory.Enqueue(delta);
+        while (_eventHistory.Count > 20)
+        {
+            _eventHistory.Dequeue();
+        }
+
+        _throughputSparkline.SetDataPoints(_eventHistory);
     }
 
     /// <summary>
-    /// Detaches the terminal-resize handler if it was attached.
+    /// Renders the most frequent event types from the recent-events window as a horizontal bar list.
     /// </summary>
-    void UnsubscribeFromResize()
+    /// <param name="data">The current snapshot.</param>
+    /// <param name="mut">Muted color markup.</param>
+    /// <param name="accent">Accent color markup for the type names.</param>
+    void UpdateTopTypes(WorkbenchData data, string mut, string accent)
     {
-        if (_windowSystem is null)
+        if (_topTypesPanel is null) return;
+
+        var counts = data.RecentEvents
+            .GroupBy(e => e.Context.EventType.Id)
+            .Select(g => (Type: g.Key, Count: g.Count()))
+            .OrderByDescending(t => t.Count)
+            .Take(5)
+            .ToList();
+
+        if (counts.Count == 0)
         {
+            _topTypesPanel.Content = $"[{mut}]No recent events[/]";
             return;
         }
 
-        _windowSystem.WindowResized -= OnTerminalResized;
+        var max = counts[0].Count;
+        var lines = counts.Select(t =>
+        {
+            var name = t.Type.Length > 22 ? t.Type[..21] + "…" : t.Type;
+            return $"[{accent}]{name,-22}[/] {WorkbenchUi.GradientBar(t.Count, max, 12, Theme.Teal, Theme.Accent, Theme.Muted)} [{mut}]{t.Count}[/]";
+        });
+
+        _topTypesPanel.Content = string.Join('\n', lines);
     }
 }

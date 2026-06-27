@@ -69,36 +69,12 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
         List<ViewAction> actions = [];
         if (OnViewEventTypeDefinition is not null)
         {
-            actions.Add(new ViewAction(
-                "View definition",
-                "D",
-                ConsoleKey.D,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnViewEventTypeDefinition(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("View definition", ConsoleKey.D, item => OnViewEventTypeDefinition(item)));
         }
 
         if (OnViewObserversForType is not null)
         {
-            actions.Add(new ViewAction(
-                "View observers",
-                "V",
-                ConsoleKey.V,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnViewObserversForType(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("View observers", ConsoleKey.V, item => OnViewObserversForType(item)));
         }
 
         return actions;
@@ -115,11 +91,14 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     };
 
     /// <inheritdoc/>
+    protected override void OnInspect(AppendedEvent item) => OnViewEventTypeDefinition?.Invoke(item);
+
+    /// <inheritdoc/>
     protected override string RenderDetail(AppendedEvent? item, WorkbenchData? data)
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select an event.[/]";
+            return SelectPrompt("an event");
         }
 
         var acc = Theme.Accent.ToMarkup();

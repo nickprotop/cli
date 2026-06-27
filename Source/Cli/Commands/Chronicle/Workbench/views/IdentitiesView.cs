@@ -41,7 +41,7 @@ public class IdentitiesView : FilterableTableView<Identity>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select an identity.[/]";
+            return SelectPrompt("an identity");
         }
 
         var mut = Theme.Muted.ToMarkup();

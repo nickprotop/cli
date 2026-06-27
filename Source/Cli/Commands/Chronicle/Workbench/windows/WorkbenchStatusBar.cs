@@ -85,7 +85,7 @@ public class WorkbenchStatusBar
         }
         else
         {
-            _connectionItem.Label = "● Disconnected";
+            _connectionItem.Label = "○ Disconnected";
             _connectionItem.LabelForeground = _theme.Danger;
         }
 

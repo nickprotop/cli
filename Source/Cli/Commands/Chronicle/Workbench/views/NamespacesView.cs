@@ -1,140 +1,35 @@
 // Copyright (c) Cratis. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using SharpConsoleUI;
-using SharpConsoleUI.Builders;
-using SharpConsoleUI.Controls;
-using UITableRow = SharpConsoleUI.Controls.TableRow;
-
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
 /// <summary>
-/// Namespaces tab — list of available namespaces in the current event store with a Switch action.
-/// Selecting an entry and pressing Enter switches the active namespace.
+/// Namespaces tab — a filterable table of namespaces in the current event store, with an active
+/// indicator and a detail pane. Switching (Enter, double-click, or the Switch action) makes the
+/// selected namespace active.
 /// </summary>
-public class NamespacesView : IWorkbenchView
+public class NamespacesView : SwitchableNameView
 {
-    ConsoleWindowSystem? _windowSystem;
-    WorkbenchTheme? _themeInstance;
-    TableControl? _table;
-    MarkupControl? _helpPane;
-    WorkbenchData? _pendingData;
+    /// <inheritdoc/>
+    protected override string? PageTitle => "NAMESPACES";
 
     /// <inheritdoc/>
-    public bool IsActive { get; set; }
-
-    /// <summary>
-    /// Gets or sets the callback invoked when the user switches to a different namespace.
-    /// </summary>
-    public Action<string>? OnSwitch { get; set; }
-
-    WorkbenchTheme Theme => _themeInstance ??= new WorkbenchTheme(_windowSystem!);
+    protected override string DetailPanelHeader => "NAMESPACE";
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        _table?.Dispose();
-        _helpPane?.Dispose();
-    }
+    protected override string ColumnHeader => "Namespace";
 
     /// <inheritdoc/>
-    public void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem)
-    {
-        _windowSystem = windowSystem;
-        _themeInstance = new WorkbenchTheme(windowSystem);
-        _table = Controls.Table()
-            .AddColumn("Namespace", SharpConsoleUI.Layout.TextJustification.Left, null)
-            .Interactive()
-            .WithFiltering()
-            .WithSorting()
-            .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-            .OnRowActivated((_, _) => SwitchToSelected())
-            .WithName("NamespacesTable")
-            .Build();
-
-        _helpPane = new MarkupControl(
-        [
-            $"[{Theme.Accent.ToMarkup()}][bold]SWITCH NAMESPACE[/][/]",
-            string.Empty,
-            $"  [{Theme.Muted.ToMarkup()}]Select a namespace and press[/] [bold]Enter[/] [{Theme.Muted.ToMarkup()}]to switch.[/]"
-        ])
-        { Name = "NamespacesHelp" };
-
-        var root = HorizontalGridControl.Create()
-            .Column(c => c.Add(_table))
-            .WithSplitterAfter(0)
-            .Column(c => c.Width(44).Add(_helpPane))
-            .Build();
-
-        // Apply any data that arrived before controls were ready (NavigationView lazy init).
-        if (_pendingData is not null)
-        {
-            UpdateData(_pendingData);
-        }
-
-        panel.ClearContents();
-        panel.AddControl(root);
-    }
+    protected override string Noun => "namespace";
 
     /// <inheritdoc/>
-    public void UpdateData(WorkbenchData data)
-    {
-        _pendingData = data;
-        if (_table is null) return;
+    protected override (IReadOnlyList<string> Names, string Active) Source(WorkbenchData data) =>
+        (data.NamespaceNames, data.Namespace);
 
-        var selectedKey = _table.SelectedRow?.Tag as string;
-
-        _table.ClearRows();
-        foreach (var name in data.NamespaceNames.Order())
-        {
-            _table.AddRow(new UITableRow([name]) { Tag = name });
-        }
-
-        if (selectedKey is not null)
-        {
-            RestoreSelection(selectedKey);
-        }
-
-        if (_helpPane is null) return;
-
-        var acc = Theme.Accent.ToMarkup();
-        var mut = Theme.Muted.ToMarkup();
-        var suc = Theme.Success.ToMarkup();
-
-        var lines = new List<string>
-        {
-            $"[{acc}][bold]SWITCH NAMESPACE[/][/]",
-            string.Empty,
-            $"[{mut}]Active[/]     [{suc}]{data.Namespace}[/]",
-            $"[{mut}]Store[/]      [{mut}]{data.EventStore}[/]",
-            $"[{mut}]Available[/]  {data.NamespaceNames.Count}",
-            string.Empty,
-            $"  [{mut}]Select a namespace and press[/] [bold]Enter[/]",
-            $"  [{mut}]to make it the active namespace.[/]"
-        };
-
-        _helpPane.Text = string.Join('\n', lines);
-    }
-
-    void RestoreSelection(string key)
-    {
-        if (_table is null) return;
-
-        for (var i = 0; i < _table.Rows.Count; i++)
-        {
-            if (_table.Rows[i].Tag is string name && name == key)
-            {
-                _table.SelectedRowIndex = i;
-                return;
-            }
-        }
-    }
-
-    void SwitchToSelected()
-    {
-        if (_table?.SelectedRow?.Tag is string nsName)
-        {
-            OnSwitch?.Invoke(nsName);
-        }
-    }
+    /// <inheritdoc/>
+    protected override IEnumerable<string> ExtraDetailLines(NamedActiveRow item, WorkbenchData? data, string mut) =>
+    [
+        $"[{mut}]Store[/]      {data?.EventStore ?? string.Empty}",
+        $"[{mut}]Available[/]  {data?.NamespaceNames.Count ?? 0} namespace(s)"
+    ];
 }

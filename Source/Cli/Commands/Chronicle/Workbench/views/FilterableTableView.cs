@@ -161,7 +161,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             tableBuilder.AddColumn(name, justify, width);
         }
 
-        tableBuilder = WorkbenchUi.StyleDataTable(tableBuilder, TableAccentRole)
+        tableBuilder = WorkbenchUi.StyleDataTable(tableBuilder, TableAccentRole, Theme.Muted)
             .Interactive()
             .WithVerticalScrollbar(ScrollbarVisibility.Auto)
             .OnSelectedRowChanged((_, _) =>
@@ -497,10 +497,93 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     /// <returns>Completion suggestions.</returns>
     protected virtual IEnumerable<string> GetCompletions(string input) => [];
 
-    /// <summary>Called when Enter is pressed on a row. Default: no-op.</summary>
+    /// <summary>
+    /// Called when a row is activated — Enter key or double-click. Activation is a non-destructive
+    /// "inspect" gesture: it delegates to <see cref="OnInspect"/>, never a mutating action. Destructive
+    /// operations (replay, retry, stop, apply) are reachable only via their explicit shortcut key,
+    /// toolbar button, or context menu — so a reflexive double-click can never trigger one.
+    /// </summary>
     /// <param name="item">The activated item.</param>
-    protected virtual void OnRowActivated(TItem item)
+    protected void OnRowActivated(TItem item) => OnInspect(item);
+
+    /// <summary>
+    /// Inspects the activated row. The default ensures the detail pane is visible, so activation always
+    /// reveals more about the row without changing anything. Views with a richer read view (e.g. a
+    /// definition or instances overlay) override this to open it.
+    /// </summary>
+    /// <param name="item">The row to inspect.</param>
+    protected virtual void OnInspect(TItem item) => ShowDetailPane();
+
+    /// <summary>
+    /// Ensures the detail pane is visible (opening it if currently collapsed). Used as the default
+    /// inspect gesture so activating a row always reveals its detail.
+    /// </summary>
+    protected void ShowDetailPane()
     {
+        if (_root is null || _detailPaneVisible)
+        {
+            return;
+        }
+
+        _detailPaneVisible = true;
+        _root.AnimateColumnWidth(1, DetailPaneWidth, TimeSpan.FromMilliseconds(180), EasingFunctions.EaseInOut);
+    }
+
+    /// <summary>
+    /// Builds the muted "Select a/an &lt;noun&gt;." prompt shown in the detail pane when no row is selected.
+    /// </summary>
+    /// <param name="noun">The entity noun including its article (e.g. "an observer", "a job").</param>
+    /// <returns>The muted prompt markup.</returns>
+    protected string SelectPrompt(string noun) => $"[{Theme.Muted.ToMarkup()}]Select {noun}.[/]";
+
+    /// <summary>
+    /// Builds a single-item toolbar action that operates on the current <see cref="SelectedItem"/>: it is
+    /// enabled while a row is selected and runs <paramref name="onSelected"/> with that row when triggered.
+    /// </summary>
+    /// <param name="label">The action label.</param>
+    /// <param name="key">The shortcut key (also shown as the toolbar key hint).</param>
+    /// <param name="onSelected">The callback run with the selected item.</param>
+    /// <returns>The configured <see cref="ViewAction"/>.</returns>
+    protected ViewAction SingleAction(string label, ConsoleKey key, Action<TItem> onSelected) =>
+        new(
+            label,
+            key.ToString(),
+            key,
+            default,
+            () =>
+            {
+                if (SelectedItem is TItem item)
+                {
+                    onSelected(item);
+                }
+            },
+            Enabled: SelectedItem is not null);
+
+    /// <summary>
+    /// Builds a bulk toolbar action over the currently checked rows: its label reads "{verb} N checked",
+    /// it is enabled only when more than one row is checked, and it runs <paramref name="onChecked"/> with
+    /// the checked set. Bulk actions have no shortcut key (they are toolbar / context-menu only).
+    /// </summary>
+    /// <param name="verb">The action verb (e.g. "Replay", "Stop").</param>
+    /// <param name="onChecked">The callback run with the checked items.</param>
+    /// <returns>The configured <see cref="ViewAction"/>.</returns>
+    protected ViewAction BulkAction(string verb, Action<IReadOnlyList<TItem>> onChecked)
+    {
+        var checkedItems = CheckedItems;
+        return new ViewAction(
+            $"{verb} {checkedItems.Count} checked",
+            null,
+            null,
+            default,
+            () =>
+            {
+                var items = CheckedItems;
+                if (items.Count > 1)
+                {
+                    onChecked(items);
+                }
+            },
+            Enabled: checkedItems.Count > 1);
     }
 
     /// <summary>
@@ -534,13 +617,6 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     /// or <see langword="null"/> to suppress the header entirely.
     /// </returns>
     protected virtual IWindowControl? BuildHeader() => null;
-
-    static int ContextMenuWidth(List<ViewAction> actions)
-    {
-        var maxLabel = actions.Max(a => a.Label.Length);
-        var maxHint = actions.Max(a => a.KeyHint?.Length ?? 0);
-        return maxLabel + (maxHint > 0 ? maxHint + 4 : 0) + 4;
-    }
 
     static void SetButtonEnabled(ButtonControl? button, bool enabled)
     {
@@ -731,60 +807,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
         }
 
         var actions = GetToolbarActionTemplate().Where(a => a.Enabled).ToList();
-        if (actions.Count == 0)
-        {
-            return;
-        }
-
-        ShowContextMenu(e.AbsolutePosition.X, e.AbsolutePosition.Y, actions);
-    }
-
-    void ShowContextMenu(int x, int y, List<ViewAction> actions)
-    {
-        if (_windowSystem is null)
-        {
-            return;
-        }
-
-        var menuBuilder = Controls.Menu().Vertical()
-            .WithMenuBarColors(Theme.Background, Theme.Foreground, Theme.Accent, Theme.Background)
-            .WithDropdownColors(Theme.Background, Theme.Foreground, Theme.Accent, Theme.Background);
-
-        foreach (var action in actions)
-        {
-            menuBuilder.AddItem(action.Label, action.KeyHint ?? string.Empty, action.Execute);
-        }
-
-        var menu = menuBuilder.Build();
-        Window? contextWindow = null;
-
-        menu.ItemSelected += (_, _) => _windowSystem.CloseWindow(contextWindow, activateParent: true, force: false);
-
-        var width = Math.Max(20, ContextMenuWidth(actions));
-        var height = actions.Count + 2;
-        var clampedX = Math.Max(0, Math.Min(x, Console.WindowWidth - width));
-        var clampedY = Math.Max(0, Math.Min(y, Console.WindowHeight - height));
-
-        contextWindow = new WindowBuilder(_windowSystem)
-            .WithTitle(string.Empty)
-            .HideTitle()
-            .HideCloseButton()
-            .WithColors(Theme.Foreground, Theme.Background)
-            .WithSize(width, height)
-            .AtPosition(clampedX, clampedY)
-            .WithCloseOnDeactivate(true)
-            .AddControl(menu)
-            .OnKeyPressed((_, ke) =>
-            {
-                if (ke.KeyInfo.Key == ConsoleKey.Escape)
-                {
-                    _windowSystem.CloseWindow(contextWindow, activateParent: true, force: false);
-                    ke.Handled = true;
-                }
-            })
-            .Build();
-
-        _windowSystem.AddWindow(contextWindow, activateWindow: true);
+        WorkbenchContextMenu.Show(_windowSystem, Theme, e.AbsolutePosition.X, e.AbsolutePosition.Y, actions);
     }
 
     void RebuildRows()

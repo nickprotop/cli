@@ -20,7 +20,7 @@ public class JobsView : FilterableTableView<Job>
         "  [S]  Stop the selected job\n" +
         "  [U]  Resume a stopped job\n" +
         "  [Space]  Check / uncheck row for bulk operations\n" +
-        "  [S] / [U]  (with 2+ checked) Bulk stop / resume all checked jobs";
+        "  Check rows + toolbar / right-click → bulk stop / resume";
 
     /// <summary>
     /// Gets or sets the callback invoked when the user requests to stop a job.
@@ -70,74 +70,22 @@ public class JobsView : FilterableTableView<Job>
         List<ViewAction> actions = [];
         if (OnStopJob is not null)
         {
-            actions.Add(new ViewAction(
-                "Stop job",
-                "S",
-                ConsoleKey.S,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnStopJob(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Stop job", ConsoleKey.S, item => OnStopJob(item)));
         }
 
         if (OnResumeJob is not null)
         {
-            actions.Add(new ViewAction(
-                "Resume job",
-                "U",
-                ConsoleKey.U,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnResumeJob(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Resume job", ConsoleKey.U, item => OnResumeJob(item)));
         }
 
         if (OnStopAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Stop {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnStopAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Stop", items => OnStopAll(items)));
         }
 
         if (OnResumeAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Resume {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnResumeAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Resume", items => OnResumeAll(items)));
         }
 
         return actions;
@@ -167,7 +115,7 @@ public class JobsView : FilterableTableView<Job>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a job.[/]";
+            return SelectPrompt("a job");
         }
 
         var mut = Theme.Muted.ToMarkup();
@@ -182,7 +130,7 @@ public class JobsView : FilterableTableView<Job>
 
         if (item.Progress?.TotalSteps > 0)
         {
-            lines.Add($"[{mut}]Progress[/] {WorkbenchUi.GradientBar(item.Progress.SuccessfulSteps, item.Progress.TotalSteps, 24)} {item.Progress.SuccessfulSteps}/{item.Progress.TotalSteps}");
+            lines.Add($"[{mut}]Progress[/] {WorkbenchUi.GradientBar(item.Progress.SuccessfulSteps, item.Progress.TotalSteps, 24, Theme.Teal, Theme.Accent, Theme.Muted)} {item.Progress.SuccessfulSteps}/{item.Progress.TotalSteps}");
         }
         else
         {

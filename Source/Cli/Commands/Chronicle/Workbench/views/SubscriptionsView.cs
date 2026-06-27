@@ -45,7 +45,7 @@ public class SubscriptionsView : FilterableTableView<EventStoreSubscriptionDefin
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a subscription.[/]";
+            return SelectPrompt("a subscription");
         }
 
         var mut = Theme.Muted.ToMarkup();

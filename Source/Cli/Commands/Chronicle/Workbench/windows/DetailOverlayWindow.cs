@@ -4,6 +4,7 @@
 using SharpConsoleUI;
 using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -61,36 +62,24 @@ public class DetailOverlayWindow
 
         var tabControl = tabBuilder.Fill().Build();
 
-        var toolbarBuilder = Controls.Toolbar()
-            .WithBelowLine(false)
-            .WithAboveLine(true)
-            .WithAboveLineColor(theme.Muted);
+        var dialogButtons = actions
+            .Select(a => new DialogButton(a.Label, ColorRole.Primary, a.Execute))
+            .ToList();
 
-        foreach (var (label, execute) in actions)
-        {
-            toolbarBuilder.AddButton(label, (_, _) => execute());
-        }
-
-        var toolbar = toolbarBuilder.Build();
-
-        _window = new WindowBuilder(windowSystem)
-            .WithTitle(title)
-            .Centered()
-            .WithSize(120, 35)
-            .AddControl(tabControl)
-            .AddControl(toolbar)
-            .OnKeyPressed(HandleKeyPress)
-            .Build();
+        _window = WorkbenchUi.BuildDialog(
+            windowSystem,
+            theme,
+            title,
+            [tabControl],
+            dialogButtons,
+            new DialogOptions
+            {
+                FillBody = true,
+                CloseOnAction = false,
+                Width = Math.Min(120, Console.WindowWidth - 4),
+                Height = Math.Min(35, Console.WindowHeight - 4)
+            });
 
         return _window;
-
-        void HandleKeyPress(object? sender, KeyPressedEventArgs e)
-        {
-            if (e.KeyInfo.Key == ConsoleKey.Escape && _window is not null)
-            {
-                windowSystem.CloseWindow(_window, activateParent: true, force: false);
-                e.Handled = true;
-            }
-        }
     }
 }

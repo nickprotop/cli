@@ -48,7 +48,7 @@ public class UsersView : FilterableTableView<User>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a user.[/]";
+            return SelectPrompt("a user");
         }
 
         var mut = Theme.Muted.ToMarkup();

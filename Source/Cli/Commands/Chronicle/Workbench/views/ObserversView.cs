@@ -20,7 +20,7 @@ public class ObserversView : FilterableTableView<ObserverInformation>
         "Lists all registered observers and their current running state.\n" +
         "  [R]  Replay the selected observer from the beginning\n" +
         "  [Space]  Check / uncheck row for bulk operations\n" +
-        "  [R]  (with 2+ checked) Replay all checked observers";
+        "  Check rows + toolbar / right-click → replay all checked";
 
     /// <summary>
     /// Gets or sets the callback invoked when the user requests a replay of the selected observer.
@@ -63,38 +63,12 @@ public class ObserversView : FilterableTableView<ObserverInformation>
         List<ViewAction> actions = [];
         if (OnReplay is not null)
         {
-            actions.Add(new ViewAction(
-                "Replay observer",
-                "R",
-                ConsoleKey.R,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnReplay(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Replay observer", ConsoleKey.R, item => OnReplay(item)));
         }
 
         if (OnReplayAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Replay {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnReplayAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Replay", items => OnReplayAll(items)));
         }
 
         return actions;
@@ -133,7 +107,7 @@ public class ObserversView : FilterableTableView<ObserverInformation>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select an observer.[/]";
+            return SelectPrompt("an observer");
         }
 
         var mut = Theme.Muted.ToMarkup();
@@ -198,28 +172,9 @@ public class ObserversView : FilterableTableView<ObserverInformation>
         "type:reactor"
     ];
 
-    static int ObserverSortOrder(ObserverInformation o) => o.RunningState switch
-    {
-        ObserverRunningState.Disconnected => 0,
-        ObserverRunningState.Replaying => 1,
-        ObserverRunningState.Active => 2,
-        ObserverRunningState.Suspended => 3,
-        _ => 4
-    };
+    static int ObserverSortOrder(ObserverInformation o) => ObserverPresentation.SortOrder(o);
 
-    static string GetObserverIcon(ObserverInformation obs) => obs.RunningState switch
-    {
-        ObserverRunningState.Active => "●",
-        ObserverRunningState.Replaying => "▲",
-        ObserverRunningState.Disconnected => "⊘",
-        _ => "○"
-    };
+    static string GetObserverIcon(ObserverInformation obs) => ObserverPresentation.Icon(obs);
 
-    string GetObserverStateColor(ObserverInformation obs) => obs.RunningState switch
-    {
-        ObserverRunningState.Active => Theme.Success.ToMarkup(),
-        ObserverRunningState.Replaying => Theme.Warning.ToMarkup(),
-        ObserverRunningState.Disconnected => Theme.Danger.ToMarkup(),
-        _ => Theme.Muted.ToMarkup()
-    };
+    string GetObserverStateColor(ObserverInformation obs) => ObserverPresentation.StateColor(obs, Theme);
 }

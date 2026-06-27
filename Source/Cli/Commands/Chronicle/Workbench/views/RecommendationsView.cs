@@ -20,7 +20,7 @@ public class RecommendationsView : FilterableTableView<Recommendation>
         "  [A]  Apply the selected recommendation\n" +
         "  [I]  Ignore the selected recommendation\n" +
         "  [Space]  Check / uncheck row for bulk operations\n" +
-        "  [A] / [I]  (with 2+ checked) Bulk apply / ignore all checked";
+        "  Check rows + toolbar / right-click → bulk apply / ignore";
 
     /// <summary>
     /// Gets or sets the callback invoked when the user applies a recommendation.
@@ -72,74 +72,22 @@ public class RecommendationsView : FilterableTableView<Recommendation>
         List<ViewAction> actions = [];
         if (OnApply is not null)
         {
-            actions.Add(new ViewAction(
-                "Apply recommendation",
-                "A",
-                ConsoleKey.A,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnApply(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Apply recommendation", ConsoleKey.A, item => OnApply(item)));
         }
 
         if (OnIgnore is not null)
         {
-            actions.Add(new ViewAction(
-                "Ignore recommendation",
-                "I",
-                ConsoleKey.I,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnIgnore(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Ignore recommendation", ConsoleKey.I, item => OnIgnore(item)));
         }
 
         if (OnApplyAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Apply {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnApplyAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Apply", items => OnApplyAll(items)));
         }
 
         if (OnIgnoreAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Ignore {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnIgnoreAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Ignore", items => OnIgnoreAll(items)));
         }
 
         return actions;
@@ -160,7 +108,7 @@ public class RecommendationsView : FilterableTableView<Recommendation>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a recommendation.[/]";
+            return SelectPrompt("a recommendation");
         }
 
         var mut = Theme.Muted.ToMarkup();

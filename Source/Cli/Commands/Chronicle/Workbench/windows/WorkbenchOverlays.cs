@@ -27,9 +27,6 @@ public class WorkbenchOverlays(
     WorkbenchActionHandler actionHandler,
     WorkbenchRefreshLoop refreshLoop)
 {
-    const int HelpOverlayWidth = 72;
-    const int HelpOverlayHeight = 40;
-
     readonly WorkbenchTheme _theme = new(windowSystem);
 
     Window? _mainWindow;
@@ -94,9 +91,10 @@ public class WorkbenchOverlays(
             $"  [{mut}]↑ ↓[/]           Move selection up / down\n" +
             $"  [{mut}]← / →[/]         Focus sidebar / content pane\n" +
             $"  [{mut}]Home / Shift+G[/] Jump to first / last row\n" +
+            $"  [{mut}]1 – 9[/]          Jump to view by number\n" +
             $"  [{mut}]Ctrl+B[/]         Toggle sidebar expand / compact\n" +
             $"  [{mut}]Ctrl+\\[/]         Toggle detail pane\n" +
-            $"  [{mut}]Enter[/]          Open detail overlay\n" +
+            $"  [{mut}]Enter / dbl-click[/] Inspect selected row (open detail)\n" +
             $"  [{mut}]Esc[/]            Close overlay\n" +
             "\n" +
             $"[bold {acc}]QUICK SWITCH[/]\n" +
@@ -110,7 +108,7 @@ public class WorkbenchOverlays(
             "\n" +
             $"[bold {acc}]VIEW ACTIONS (when row selected)[/]\n" +
             $"  [{mut}]?[/]              See this screen — actions vary per view\n" +
-            $"  [{mut}]Y / N[/]          Confirm / Cancel pending action\n" +
+            $"  [{mut}]Y[/] [{mut}]/[/] [{mut}]Esc[/]        Confirm / cancel inside a confirmation dialog\n" +
             "\n" +
             $"[bold {acc}]CLIPBOARD[/]\n" +
             $"  [{mut}]Ctrl+C[/]         Copy detail pane content to clipboard\n" +
@@ -124,29 +122,12 @@ public class WorkbenchOverlays(
             $"  [{mut}]Q[/]              Quit";
 
         var markup = new MarkupControl([helpText]) { Wrap = true };
-        var content = Controls.ScrollablePanel()
-            .AddControl(markup)
-            .WithVerticalScroll(ScrollMode.Scroll)
-            .WithPadding(2, 1, 2, 1)
-            .Build();
-
-        Window? helpWindow = null;
-        helpWindow = new WindowBuilder(windowSystem)
-            .WithTitle(" Keyboard Shortcuts ")
-            .WithSize(HelpOverlayWidth, HelpOverlayHeight)
-            .Centered()
-            .AddControl(content)
-            .OnKeyPressed((_, e) =>
-            {
-                if (e.KeyInfo.Key == ConsoleKey.Escape ||
-                    (e.KeyInfo.Key == ConsoleKey.Oem2 && e.KeyInfo.Modifiers == ConsoleModifiers.Shift))
-                {
-                    windowSystem.CloseWindow(helpWindow, activateParent: true, force: false);
-                }
-
-                e.Handled = true;
-            })
-            .Build();
+        var helpWindow = WorkbenchUi.BuildDialog(
+            windowSystem,
+            _theme,
+            "Keyboard Shortcuts",
+            [markup],
+            []);
 
         windowSystem.AddWindow(helpWindow, activateWindow: true);
     }
@@ -179,6 +160,17 @@ public class WorkbenchOverlays(
 
         _palettePortal = palette;
         _palettePortalNode = _mainWindow.CreatePortal(navigation.NavView, palette);
+
+        // Route focus through the window's FocusManager (not just the portal-local focus) so the search
+        // prompt's text cursor renders — the cursor seam reads FocusManager.FocusedControl. Mirrors how
+        // NavigationView focuses its own portal content.
+        var firstFocusable = palette.GetChildren()
+            .OfType<IFocusableControl>()
+            .FirstOrDefault(c => c.CanReceiveFocus);
+        if (firstFocusable is not null)
+        {
+            _mainWindow.FocusManager.SetFocus(firstFocusable, FocusReason.Programmatic);
+        }
 
         // Suppress global shortcuts while the palette search prompt has focus.
         actionHandler.TextInputFocused = true;
@@ -300,34 +292,38 @@ public class WorkbenchOverlays(
             .WithSplitterAfter(0)
             .Column(c => c.Width(38).Add(detailPanel))
             .Build();
+        layout.VerticalAlignment = SharpConsoleUI.Layout.VerticalAlignment.Fill;
 
-        var width = Math.Min(96, Console.WindowWidth - 4);
-        var height = Math.Min(28, Console.WindowHeight - 4);
-
-        Window? overlayWindow = null;
-        overlayWindow = new WindowBuilder(windowSystem)
-            .WithTitle($" Observers for {eventTypeId} ")
-            .WithSize(width, height)
-            .Centered()
-            .AddControl(layout)
-            .OnKeyPressed((_, e) =>
+        void OpenSelected()
+        {
+            if (table.SelectedRow?.Tag is ObserverInformation obs)
             {
-                if (e.KeyInfo.Key == ConsoleKey.Escape)
-                {
-                    windowSystem.CloseWindow(overlayWindow, activateParent: true, force: false);
-                    e.Handled = true;
-                    return;
-                }
+                navigateToObserver(obs);
+            }
+        }
 
-                if (e.KeyInfo.Key == ConsoleKey.Enter &&
-                    table.SelectedRow?.Tag is ObserverInformation obs)
+        var overlayWindow = WorkbenchUi.BuildDialog(
+            windowSystem,
+            _theme,
+            $"Observers for {eventTypeId}",
+            [layout],
+            [new DialogButton("Open Observer", ColorRole.Warning, OpenSelected)],
+            new DialogOptions
+            {
+                Severity = DialogSeverity.Warning,
+                FillBody = true,
+                OnKey = (key, close) =>
                 {
-                    windowSystem.CloseWindow(overlayWindow, activateParent: true, force: false);
-                    navigateToObserver(obs);
-                    e.Handled = true;
+                    if (key.Key == ConsoleKey.Enter && table.SelectedRow?.Tag is ObserverInformation obs)
+                    {
+                        close();
+                        navigateToObserver(obs);
+                        return true;
+                    }
+
+                    return false;
                 }
-            })
-            .Build();
+            });
 
         windowSystem.AddWindow(overlayWindow, activateWindow: true);
     }
@@ -377,58 +373,21 @@ public class WorkbenchOverlays(
         }
 
         var markup = new MarkupControl([content]) { Wrap = true };
-        var scrollable = Controls.ScrollablePanel()
-            .AddControl(markup)
-            .WithVerticalScroll(ScrollMode.Scroll)
-            .WithPadding(2, 1, 2, 1)
-            .Build();
-
-        var width = Math.Min(80, Console.WindowWidth - 4);
-        var height = Math.Min(32, Console.WindowHeight - 4);
-
-        Window? defWindow = null;
-        defWindow = new WindowBuilder(windowSystem)
-            .WithTitle($" Event Type: {eventTypeId} ")
-            .WithSize(width, height)
-            .Centered()
-            .AddControl(scrollable)
-            .OnKeyPressed((_, e) =>
-            {
-                if (e.KeyInfo.Key == ConsoleKey.Escape)
-                {
-                    windowSystem.CloseWindow(defWindow, activateParent: true, force: false);
-                    e.Handled = true;
-                }
-            })
-            .Build();
+        var defWindow = WorkbenchUi.BuildDialog(
+            windowSystem,
+            _theme,
+            $"Event Type: {eventTypeId}",
+            [markup],
+            []);
 
         windowSystem.AddWindow(defWindow, activateWindow: true);
     }
 
-    static int ObserverSortOrder(ObserverInformation o) => o.RunningState switch
-    {
-        ObserverRunningState.Disconnected => 0,
-        ObserverRunningState.Replaying => 1,
-        ObserverRunningState.Active => 2,
-        ObserverRunningState.Suspended => 3,
-        _ => 4
-    };
+    static int ObserverSortOrder(ObserverInformation o) => ObserverPresentation.SortOrder(o);
 
-    static string ObserverIcon(ObserverInformation obs) => obs.RunningState switch
-    {
-        ObserverRunningState.Active => "●",
-        ObserverRunningState.Replaying => "▲",
-        ObserverRunningState.Disconnected => "⊘",
-        _ => "○"
-    };
+    static string ObserverIcon(ObserverInformation obs) => ObserverPresentation.Icon(obs);
 
-    string ObserverStateColor(ObserverInformation obs) => obs.RunningState switch
-    {
-        ObserverRunningState.Active => _theme.Success.ToMarkup(),
-        ObserverRunningState.Replaying => _theme.Warning.ToMarkup(),
-        ObserverRunningState.Disconnected => _theme.Danger.ToMarkup(),
-        _ => _theme.Muted.ToMarkup()
-    };
+    string ObserverStateColor(ObserverInformation obs) => ObserverPresentation.StateColor(obs, _theme);
 
     string RenderObserverDetail(ObserverInformation obs, string mut, string acc, string warn)
     {

@@ -57,19 +57,7 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
         List<ViewAction> actions = [];
         if (OnViewObservers is not null)
         {
-            actions.Add(new ViewAction(
-                "View observers",
-                "V",
-                ConsoleKey.V,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnViewObservers(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("View observers", ConsoleKey.V, item => OnViewObservers(item)));
         }
 
         return actions;
@@ -91,7 +79,7 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select an event type.[/]";
+            return SelectPrompt("an event type");
         }
 
         var acc = Theme.Accent.ToMarkup();

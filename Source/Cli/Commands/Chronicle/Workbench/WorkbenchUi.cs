@@ -8,6 +8,7 @@ using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
 using SharpConsoleUI.Helpers;
 using SharpConsoleUI.Layout;
+using SharpConsoleUI.Rendering;
 using SharpConsoleUI.Themes;
 using SColor = SharpConsoleUI.Color;
 
@@ -39,21 +40,24 @@ public static class WorkbenchUi
     /// </remarks>
     /// <param name="title">The page title rendered in bold accent color.</param>
     /// <param name="accent">The resolved accent color for the title markup. Use <c>Theme.Accent</c> or equivalent.</param>
+    /// <param name="muted">The resolved muted color for secondary text (hint, separators, labels). Use <c>Theme.Muted</c>.</param>
     /// <param name="hint">An optional contextual hint rendered as a dim chip <c>❨hint❩</c>. Omitted when null.</param>
     /// <param name="facts">Optional label/value pairs appended as <c>Label Value</c> chips separated by <c>·</c>.</param>
     /// <returns>A <see cref="MarkupControl"/> containing the formatted identity strip.</returns>
     public static IWindowControl BuildPageHeader(
         string title,
         SharpConsoleUI.Color accent,
+        SharpConsoleUI.Color muted,
         string? hint,
         params (string Label, string Value)[] facts)
     {
+        var mut = muted.ToMarkup();
         var sb = new StringBuilder();
         sb.Append($"[bold {accent.ToMarkup()}]{title}[/]");
 
         if (!string.IsNullOrEmpty(hint))
         {
-            sb.Append($"  [grey]❨{hint}❩[/]");
+            sb.Append($"  [{mut}]❨{hint}❩[/]");
         }
 
         foreach (var (label, value) in facts)
@@ -61,8 +65,8 @@ public static class WorkbenchUi
             if (string.IsNullOrEmpty(label) || string.IsNullOrEmpty(value))
                 continue;
 
-            sb.Append("  [grey]·[/]  ")
-              .Append($"[grey]{label}[/] {value}");
+            sb.Append($"  [{mut}]·[/]  ")
+              .Append($"[{mut}]{label}[/] {value}");
         }
 
         return new MarkupControl([sb.ToString()]);
@@ -221,10 +225,11 @@ public static class WorkbenchUi
     /// </summary>
     /// <param name="builder">The table builder to style.</param>
     /// <param name="accentRole">The semantic role driving the table's accent color.</param>
+    /// <param name="separator">Optional column-separator hairline color; defaults to a fixed neutral when omitted. Pass a theme-derived faint color so it follows theme switches.</param>
     /// <returns>The same builder, styled, for further chaining.</returns>
-    public static TableControlBuilder StyleDataTable(TableControlBuilder builder, ColorRole accentRole) =>
+    public static TableControlBuilder StyleDataTable(TableControlBuilder builder, ColorRole accentRole, SColor? separator = null) =>
         builder.WithSorting().NoBorder().WithColorRole(accentRole)
-               .WithColumnSeparator('│', _gridLineColor, padded: true)
+               .WithColumnSeparator('│', separator ?? _gridLineColor, padded: true)
                .ScrollbarGutter().StretchHorizontal()
                .WithVerticalAlignment(SharpConsoleUI.Layout.VerticalAlignment.Fill);
 
@@ -257,8 +262,11 @@ public static class WorkbenchUi
     /// <param name="value">The current value (clamped to 0..max).</param>
     /// <param name="max">The maximum value. When ≤ 0 the bar renders fully empty.</param>
     /// <param name="width">Total bar width in cells.</param>
+    /// <param name="fillStart">Optional gradient start color for the filled run. When both endpoints are supplied the theme gradient is used instead of the built-in cool sweep.</param>
+    /// <param name="fillEnd">Optional gradient end color for the filled run.</param>
+    /// <param name="empty">Optional color for the empty track; defaults to a fixed neutral. Pass <c>Theme.Muted</c> to follow theme switches.</param>
     /// <returns>A markup string of <paramref name="width"/> cells representing the bar.</returns>
-    public static string GradientBar(double value, double max, int width)
+    public static string GradientBar(double value, double max, int width, SColor? fillStart = null, SColor? fillEnd = null, SColor? empty = null)
     {
         if (width <= 0)
         {
@@ -273,22 +281,174 @@ public static class WorkbenchUi
         }
 
         var sb = new StringBuilder();
-        var gradient = ColorGradient.Predefined["cool"];
+
+        // Theme-derived gradient when endpoints are supplied; falls back to the built-in cool sweep.
+        var useThemeColors = fillStart.HasValue && fillEnd.HasValue;
+        var gradient = useThemeColors ? null : ColorGradient.Predefined["cool"];
 
         for (var i = 0; i < filled; i++)
         {
             var t = filled > 1 ? (double)i / (filled - 1) : 0.0;
-            var c = gradient.Interpolate(t);
+            var c = useThemeColors ? fillStart!.Value.Mix(fillEnd!.Value, t) : gradient!.Interpolate(t);
             sb.Append($"[{c.ToMarkup()}]█[/]");
         }
 
         if (filled < width)
         {
-            sb.Append($"[grey]{new string('░', width - filled)}[/]");
+            var emptyMarkup = (empty ?? new SColor(128, 128, 128)).ToMarkup();
+            sb.Append($"[{emptyMarkup}]{new string('░', width - filled)}[/]");
         }
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Builds a standard workbench dialog: a content body, an edge-to-edge rule, and a centered action
+    /// toolbar — the rule and toolbar pinned to the bottom so the buttons stay visible while the body
+    /// scrolls. The Escape key dismisses the dialog (unless a custom key handler consumes it).
+    /// </summary>
+    /// <remarks>
+    /// Layout (top → bottom): body · bottom-sticky rule · bottom-sticky centered toolbar. The modal is
+    /// centered, role-bordered (color driven by <see cref="DialogOptions.Severity"/>), and given the
+    /// elevated background gradient. Action buttons are role-styled; a trailing "Close" is appended
+    /// unless <see cref="DialogOptions.ShowCloseButton"/> is false.
+    /// </remarks>
+    /// <param name="windowSystem">The window system that hosts the modal.</param>
+    /// <param name="theme">The workbench theme, used for the border color and gradient.</param>
+    /// <param name="title">The dialog title.</param>
+    /// <param name="content">The body controls, added in order.</param>
+    /// <param name="buttons">Ordered action descriptors.</param>
+    /// <param name="options">Optional configuration (severity, body mode, key contract, sizing). Defaults apply when null.</param>
+    /// <returns>The built modal <see cref="Window"/>, ready to add to the window system.</returns>
+    public static Window BuildDialog(
+        ConsoleWindowSystem windowSystem,
+        WorkbenchTheme theme,
+        string title,
+        IReadOnlyList<IWindowControl> content,
+        IReadOnlyList<DialogButton> buttons,
+        DialogOptions? options = null)
+    {
+        options ??= new DialogOptions();
+        var (borderColor, accentRole) = SeverityColors(theme, options.Severity);
+        var width = options.Width ?? Math.Clamp(Console.WindowWidth - 12, 56, 116);
+        var height = options.Height ?? Math.Clamp(Console.WindowHeight - 6, 12, 36);
+
+        Window? dialog = null;
+        void Close()
+        {
+            if (dialog is not null)
+            {
+                windowSystem.CloseWindow(dialog, activateParent: true, force: false);
+            }
+        }
+
+        // The body either fills (controls that scroll themselves, e.g. a tab control) or is hosted in
+        // a scrollable panel that scrolls when the content overflows.
+        IWindowControl bodyControl;
+        if (options.FillBody && content.Count == 1)
+        {
+            bodyControl = content[0];
+        }
+        else
+        {
+            var panel = Controls.ScrollablePanel()
+                .WithVerticalScroll(ScrollMode.Scroll)
+                .WithPadding(1, 0, 1, 0)
+                .Build();
+            foreach (var control in content)
+            {
+                panel.AddControl(control);
+            }
+
+            bodyControl = panel;
+        }
+
+        // Edge-to-edge divider above the toolbar, pinned to the bottom so it tracks the toolbar.
+        var rule = Controls.RuleBuilder()
+            .WithColorRole(accentRole)
+            .WithBorderStyle(BorderStyle.Single)
+            .StickyBottom()
+            .Build();
+
+        var toolbar = Controls.Toolbar()
+            .WithSpacing(2)
+            .WithAlignment(SharpConsoleUI.Layout.HorizontalAlignment.Center);
+        foreach (var button in buttons)
+        {
+            var captured = button.OnClick;
+            var closeOnAction = options.CloseOnAction;
+            toolbar.AddButton(new ButtonBuilder()
+                .WithText(button.Label)
+                .WithColorRole(button.Role)
+                .OnClick((_, _) =>
+                {
+                    if (closeOnAction)
+                    {
+                        Close();
+                    }
+
+                    captured();
+                }));
+        }
+
+        if (options.ShowCloseButton)
+        {
+            toolbar.AddButton(new ButtonBuilder()
+                .WithText("Close")
+                .WithColorRole(ColorRole.Default)
+                .OnClick((_, _) => Close()));
+        }
+
+        var bg = theme.Surface;
+        var optionsKey = options.OnKey;
+        var built = new WindowBuilder(windowSystem)
+            .WithTitle($" {title} ")
+            .WithSize(width, height)
+            .Centered()
+            .AsModal()
+            .WithBackgroundGradient(
+                ColorGradient.FromColors([bg.Tint(0.10), bg, bg.Shade(0.30)]),
+                GradientDirection.Vertical)
+            .WithBorderStyle(BorderStyle.Rounded)
+            .WithBorderColor(borderColor)
+            .Minimizable(false)
+            .Maximizable(false)
+            .OnKeyPressed((_, e) =>
+            {
+                if (optionsKey is not null && optionsKey(e.KeyInfo, Close))
+                {
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.KeyInfo.Key == ConsoleKey.Escape)
+                {
+                    Close();
+                    e.Handled = true;
+                }
+            })
+            .AddControl(bodyControl)
+            .AddControl(rule)
+            .AddControl(toolbar.StickyBottom().Build())
+            .Build();
+
+        dialog = built;
+        return built;
+    }
+
+    /// <summary>
+    /// Resolves the border color and rule role for a dialog severity.
+    /// </summary>
+    /// <param name="theme">The workbench theme.</param>
+    /// <param name="severity">The dialog severity.</param>
+    /// <returns>The border color and the rule's color role.</returns>
+    static (SColor Border, ColorRole Rule) SeverityColors(WorkbenchTheme theme, DialogSeverity severity) =>
+        severity switch
+        {
+            DialogSeverity.Danger => (theme.Danger, ColorRole.Danger),
+            DialogSeverity.Warning => (theme.Warning, ColorRole.Warning),
+            _ => (theme.DimAccent, ColorRole.Primary)
+        };
 
     static ReadOnlyCollection<ButtonControl> AddActionButtons(
         ToolbarControl toolbar,

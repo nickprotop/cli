@@ -21,7 +21,7 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
         "  [T]  Retry the selected partition (re-process from last failure)\n" +
         "  [P]  Replay the selected partition from the beginning\n" +
         "  [Space]  Check / uncheck row for bulk operations\n" +
-        "  [T] / [P]  (with 2+ checked) Bulk retry / replay all checked partitions";
+        "  Check rows + toolbar / right-click → bulk retry / replay";
 
     /// <summary>
     /// Gets or sets the callback invoked when the user requests a partition retry.
@@ -74,74 +74,22 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
         List<ViewAction> actions = [];
         if (OnRetryPartition is not null)
         {
-            actions.Add(new ViewAction(
-                "Retry partition",
-                "T",
-                ConsoleKey.T,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnRetryPartition(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Retry partition", ConsoleKey.T, item => OnRetryPartition(item)));
         }
 
         if (OnReplayPartition is not null)
         {
-            actions.Add(new ViewAction(
-                "Replay partition",
-                "P",
-                ConsoleKey.P,
-                default,
-                () =>
-                {
-                    if (SelectedItem is { } it)
-                    {
-                        OnReplayPartition(it);
-                    }
-                },
-                Enabled: SelectedItem is not null));
+            actions.Add(SingleAction("Replay partition", ConsoleKey.P, item => OnReplayPartition(item)));
         }
 
         if (OnRetryAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Retry {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnRetryAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Retry", items => OnRetryAll(items)));
         }
 
         if (OnReplayAll is not null)
         {
-            var checkedItems = Checked;
-            actions.Add(new ViewAction(
-                $"Replay {checkedItems.Count} checked",
-                null,
-                null,
-                default,
-                () =>
-                {
-                    var items = Checked;
-                    if (items.Count > 1)
-                    {
-                        OnReplayAll(items);
-                    }
-                },
-                Enabled: checkedItems.Count > 1));
+            actions.Add(BulkAction("Replay", items => OnReplayAll(items)));
         }
 
         return actions;
@@ -163,7 +111,7 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select a failed partition.[/]";
+            return SelectPrompt("a failed partition");
         }
 
         var mut = Theme.Muted.ToMarkup();

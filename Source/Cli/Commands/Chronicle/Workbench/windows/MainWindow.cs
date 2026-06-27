@@ -39,6 +39,12 @@ public class MainWindow(
     WorkbenchRefreshLoop? _refreshLoop;
     WorkbenchOverlays? _overlays;
 
+    /// <summary>Gets the active event store — the user-selected one, or the configured default.</summary>
+    string ActiveEventStore => _activeEventStore ?? settings.ResolveEventStore();
+
+    /// <summary>Gets the active namespace — the user-selected one, or the configured default.</summary>
+    string ActiveNamespace => _activeNamespace ?? settings.ResolveNamespace();
+
     /// <summary>
     /// Builds the main window, composes all workbench subsystems, and returns the ready-to-show window.
     /// </summary>
@@ -122,15 +128,29 @@ public class MainWindow(
                     bg.Shade(0.35)
                 ]),
                 GradientDirection.Vertical)
-            .Borderless() // cspell:ignore Borderless
+            .WithBorderStyle(BorderStyle.Rounded)
+            .WithBorderColor(theme.DimAccent)
             .HideTitle()
+            .HideTitleButtons()
             .HideCloseButton()
+            .Movable(false)
+            .Resizable(false)
+            .Minimizable(false)
+            .Maximizable(false)
             .AddControl(menuBar)
             .AddControl(navView)
             .AddControl(statusBarHelper.Control)
             .OnKeyPressed((_, e) => keyDispatcher.Dispatch(e))
             .WithAsyncWindowThread(_refreshLoop.RunAsync)
             .Build();
+
+        // Keep the window border in sync with the theme (a dimmed accent), re-applying on theme change
+        // since an explicit border color is pinned and would otherwise not follow F9/F10/F11.
+        theme.Changed += () =>
+        {
+            builtWindow.ActiveBorderForegroundColor = theme.DimAccent;
+            builtWindow.InactiveBorderForegroundColor = theme.DimAccent;
+        };
 
         _window = builtWindow;
 
@@ -142,10 +162,12 @@ public class MainWindow(
         // Move focus to the nav view so arrow keys, action keys, and shortcuts work immediately.
         _window.FocusControl(navView);
 
-        if (state.LastNavIndex > 0 && state.LastNavIndex < _views.Length)
-        {
-            _navigation.NavigateTo(state.LastNavIndex);
-        }
+        // Activate the saved view (Overview / index 0 included) so its content is populated on start;
+        // fall back to Overview when the saved index is out of range.
+        var startIndex = state.LastNavIndex >= 0 && state.LastNavIndex < _views.Length
+            ? state.LastNavIndex
+            : WorkbenchNavigation.IndexOverview;
+        _navigation.NavigateTo(startIndex);
 
         return builtWindow;
     }
@@ -186,8 +208,8 @@ public class MainWindow(
                 $"Replay observer '{TruncateId(obs.Id)}'",
                 () => services.Observers.Replay(new Replay
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     ObserverId = obs.Id,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
                 }));
@@ -197,8 +219,8 @@ public class MainWindow(
                 observers,
                 obs => services.Observers.Replay(new Replay
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     ObserverId = obs.Id,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
                 }),
@@ -211,8 +233,8 @@ public class MainWindow(
                 $"Retry partition '{fp.Partition}'",
                 () => services.Observers.RetryPartition(new RetryPartition
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     ObserverId = fp.ObserverId,
                     Partition = fp.Partition,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
@@ -222,8 +244,8 @@ public class MainWindow(
                 $"Replay partition '{fp.Partition}'",
                 () => services.Observers.ReplayPartition(new ReplayPartition
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     ObserverId = fp.ObserverId,
                     Partition = fp.Partition,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
@@ -234,8 +256,8 @@ public class MainWindow(
                 partitions,
                 fp => services.Observers.RetryPartition(new RetryPartition
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     ObserverId = fp.ObserverId,
                     Partition = fp.Partition,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
@@ -247,8 +269,8 @@ public class MainWindow(
                 partitions,
                 fp => services.Observers.ReplayPartition(new ReplayPartition
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     ObserverId = fp.ObserverId,
                     Partition = fp.Partition,
                     EventSequenceId = CliDefaults.DefaultEventSequenceId
@@ -262,8 +284,8 @@ public class MainWindow(
                 $"Stop job '{TruncateId(job.Type ?? job.Id.ToString())}'",
                 () => services.Jobs.Stop(new StopJob
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     JobId = job.Id
                 }));
 
@@ -271,8 +293,8 @@ public class MainWindow(
                 $"Resume job '{TruncateId(job.Type ?? job.Id.ToString())}'",
                 () => services.Jobs.Resume(new ResumeJob
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     JobId = job.Id
                 }));
 
@@ -281,8 +303,8 @@ public class MainWindow(
                 jobs,
                 job => services.Jobs.Stop(new StopJob
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     JobId = job.Id
                 }),
                 job => job.Type ?? job.Id.ToString());
@@ -292,8 +314,8 @@ public class MainWindow(
                 jobs,
                 job => services.Jobs.Resume(new ResumeJob
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     JobId = job.Id
                 }),
                 job => job.Type ?? job.Id.ToString());
@@ -305,8 +327,8 @@ public class MainWindow(
                 $"Apply recommendation '{TruncateId(rec.Name ?? rec.Id.ToString())}'",
                 () => services.Recommendations.Perform(new Perform
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     RecommendationId = rec.Id
                 }));
 
@@ -314,8 +336,8 @@ public class MainWindow(
                 $"Ignore recommendation '{TruncateId(rec.Name ?? rec.Id.ToString())}'",
                 () => services.Recommendations.Ignore(new Perform
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     RecommendationId = rec.Id
                 }));
 
@@ -324,8 +346,8 @@ public class MainWindow(
                 recs,
                 rec => services.Recommendations.Perform(new Perform
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     RecommendationId = rec.Id
                 }),
                 rec => rec.Name ?? rec.Id.ToString());
@@ -335,8 +357,8 @@ public class MainWindow(
                 recs,
                 rec => services.Recommendations.Ignore(new Perform
                 {
-                    EventStore = _activeEventStore ?? settings.ResolveEventStore(),
-                    Namespace = _activeNamespace ?? settings.ResolveNamespace(),
+                    EventStore = ActiveEventStore,
+                    Namespace = ActiveNamespace,
                     RecommendationId = rec.Id
                 }),
                 rec => rec.Name ?? rec.Id.ToString());
@@ -358,6 +380,7 @@ public class MainWindow(
             {
                 _activeEventStore = storeName;
                 _activeNamespace = null;
+                windowSystem.ToastService.Show($"Switched to event store '{storeName}'", SharpConsoleUI.Core.NotificationSeverity.Success);
                 _navigation!.NavigateTo(WorkbenchNavigation.IndexOverview);
                 _ = Task.Run(() => _refreshLoop!.FetchAndUpdate(CancellationToken.None));
             };
@@ -368,6 +391,7 @@ public class MainWindow(
             nsv.OnSwitch = nsName =>
             {
                 _activeNamespace = nsName;
+                windowSystem.ToastService.Show($"Switched to namespace '{nsName}'", SharpConsoleUI.Core.NotificationSeverity.Success);
                 _navigation!.NavigateTo(WorkbenchNavigation.IndexOverview);
                 _ = Task.Run(() => _refreshLoop!.FetchAndUpdate(CancellationToken.None));
             };

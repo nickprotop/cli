@@ -49,7 +49,7 @@ public class ApplicationsView : FilterableTableView<Application>
     {
         if (item is null)
         {
-            return $"[{Theme.Muted.ToMarkup()}]Select an application.[/]";
+            return SelectPrompt("an application");
         }
 
         var mut = Theme.Muted.ToMarkup();

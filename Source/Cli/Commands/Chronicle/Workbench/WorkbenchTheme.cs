@@ -89,6 +89,12 @@ public sealed class WorkbenchTheme
     /// <summary>Primary accent — resolved from <see cref="ColorRole.Primary"/>.</summary>
     public SColor Accent => Role(ColorRole.Primary);
 
+    /// <summary>
+    /// A dimmed accent — the accent blended toward the background so it reads as quiet chrome
+    /// (e.g. the main window border) rather than a bright highlight. Follows the theme accent.
+    /// </summary>
+    public SColor DimAccent => Accent.Mix(Background, 0.6);
+
     /// <summary>Success / healthy state — resolved from <see cref="ColorRole.Success"/>.</summary>
     public SColor Success => Role(ColorRole.Success);
 
