@@ -65,6 +65,20 @@ public abstract class SwitchableNameView : FilterableTableView<NamedActiveRow>
     protected override string GetKey(NamedActiveRow item) => item.Name;
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Activation (Enter / double-click) switches to the selected entry — the natural, non-destructive
+    /// "primary" gesture for this view (matching the "press Enter to switch" detail hint). Switching the
+    /// already-active entry is a no-op.
+    /// </remarks>
+    protected override void OnInspect(NamedActiveRow item)
+    {
+        if (!item.IsActive)
+        {
+            OnSwitch?.Invoke(item.Name);
+        }
+    }
+
+    /// <inheritdoc/>
     protected override string[] BuildRow(NamedActiveRow item) =>
     [
         item.IsActive ? $"[{Theme.Success.ToMarkup()}]▸[/]" : string.Empty,

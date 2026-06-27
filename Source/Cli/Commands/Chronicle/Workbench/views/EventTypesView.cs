@@ -49,6 +49,9 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     protected override string? PageTitle => "EVENT TYPES";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No event types registered.";
+
+    /// <inheritdoc/>
     protected override bool IsSortableColumn(int columnIndex) => columnIndex == 0;
 
     /// <inheritdoc/>

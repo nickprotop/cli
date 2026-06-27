@@ -26,6 +26,9 @@ public class SubscriptionsView : FilterableTableView<EventStoreSubscriptionDefin
     protected override string? PageTitle => "SUBSCRIPTIONS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No subscriptions configured.";
+
+    /// <inheritdoc/>
     protected override IEnumerable<EventStoreSubscriptionDefinition> GetItems(WorkbenchData data) =>
         data.EventStoreSubscriptions.OrderBy(s => s.Identifier);
 

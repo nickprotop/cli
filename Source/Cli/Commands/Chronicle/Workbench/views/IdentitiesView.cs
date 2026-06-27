@@ -26,6 +26,9 @@ public class IdentitiesView : FilterableTableView<Identity>
     protected override string? PageTitle => "IDENTITIES";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No identities.";
+
+    /// <inheritdoc/>
     protected override IEnumerable<Identity> GetItems(WorkbenchData data) =>
         data.Identities.OrderBy(i => i.Name);
 

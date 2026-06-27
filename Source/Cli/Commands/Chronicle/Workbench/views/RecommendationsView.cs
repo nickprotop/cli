@@ -67,6 +67,9 @@ public class RecommendationsView : FilterableTableView<Recommendation>
     protected override string? PageTitle => "RECOMMENDATIONS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No pending recommendations.";
+
+    /// <inheritdoc/>
     protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];

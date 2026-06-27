@@ -49,6 +49,9 @@ public class EventSequencesView : FilterableTableView<AppendedEvent>
     protected override string? PageTitle => "EVENT SEQUENCES";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No events yet.";
+
+    /// <inheritdoc/>
     protected override IEnumerable<AppendedEvent> GetItems(WorkbenchData data) => data.RecentEvents;
 
     /// <inheritdoc/>

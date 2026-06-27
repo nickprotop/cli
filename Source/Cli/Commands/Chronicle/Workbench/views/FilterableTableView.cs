@@ -136,6 +136,12 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     protected virtual string? PageTitle => null;
 
     /// <summary>
+    /// Gets the message shown in the table body when the view has no items (and no filter is active).
+    /// Views override this with a friendlier line (e.g. "No background jobs running").
+    /// </summary>
+    protected virtual string EmptyStateMessage => "Nothing to show.";
+
+    /// <summary>
     /// Computes how many rows to load per page from the available content height. Pagination drives
     /// the visible row count (the loaded rows fill the table), so this is derived from the terminal
     /// height minus the surrounding chrome rather than the table's own arranged height.
@@ -560,30 +566,32 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             Enabled: SelectedItem is not null);
 
     /// <summary>
-    /// Builds a bulk toolbar action over the currently checked rows: its label reads "{verb} N checked",
-    /// it is enabled only when more than one row is checked, and it runs <paramref name="onChecked"/> with
-    /// the checked set. Bulk actions have no shortcut key (they are toolbar / context-menu only).
+    /// Builds a bulk toolbar action over the currently checked rows: when nothing is checked the label is
+    /// just "{verb} checked" (and the action is disabled); once rows are checked it reads "{verb} N checked"
+    /// and runs <paramref name="onChecked"/> with the checked set. Bulk actions have no shortcut key (they
+    /// are toolbar / context-menu only).
     /// </summary>
     /// <param name="verb">The action verb (e.g. "Replay", "Stop").</param>
     /// <param name="onChecked">The callback run with the checked items.</param>
     /// <returns>The configured <see cref="ViewAction"/>.</returns>
     protected ViewAction BulkAction(string verb, Action<IReadOnlyList<TItem>> onChecked)
     {
-        var checkedItems = CheckedItems;
+        var count = CheckedItems.Count;
+        var label = count == 0 ? $"{verb} checked" : $"{verb} {count} checked";
         return new ViewAction(
-            $"{verb} {checkedItems.Count} checked",
+            label,
             null,
             null,
             default,
             () =>
             {
                 var items = CheckedItems;
-                if (items.Count > 1)
+                if (items.Count > 0)
                 {
                     onChecked(items);
                 }
             },
-            Enabled: checkedItems.Count > 1);
+            Enabled: count > 0);
     }
 
     /// <summary>
@@ -839,6 +847,22 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
         }
 
         _table.ClearRows();
+
+        if (sorted.Count == 0)
+        {
+            // Distinguish "no data" from "no filter matches" so a blank grid never reads as broken.
+            var message = string.IsNullOrEmpty(_currentFilter)
+                ? EmptyStateMessage
+                : $"No matches for '{_currentFilter}'";
+            var cells = new string[Columns.Count];
+            cells[0] = $"[{Theme.Muted.ToMarkup()}]{message}[/]";
+            for (var i = 1; i < cells.Length; i++)
+            {
+                cells[i] = string.Empty;
+            }
+
+            _table.AddRow(new UITableRow(cells));
+        }
 
         foreach (var item in sorted.Skip(_pageIndex * pageSize).Take(pageSize))
         {

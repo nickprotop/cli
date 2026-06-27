@@ -58,6 +58,9 @@ public class ObserversView : FilterableTableView<ObserverInformation>
     protected override string? PageTitle => "OBSERVERS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No observers registered.";
+
+    /// <inheritdoc/>
     protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];

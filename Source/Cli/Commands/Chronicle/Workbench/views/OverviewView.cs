@@ -123,7 +123,7 @@ public class OverviewView : IWorkbenchView
             .Build();
 
         _activityPanel = Controls.Panel()
-            .WithHeader(" OBSERVER ACTIVITY ")
+            .WithHeader(" OBSERVERS OVER TIME ")
             .Rounded()
             .WithColorRole(ColorRole.Primary)
             .WithPadding(1, 0, 1, 0)
@@ -273,9 +273,11 @@ public class OverviewView : IWorkbenchView
 
         // ── Jobs tile ──────────────────────────────────────────────────────────────────────────────
         _jobsTile!.ColorRole = ColorRole.Primary;
-        _jobsTile.Content = $"[bold]{data.Jobs.Count}[/]\n[{mut}]running[/]";
+        _jobsTile.Content = data.Jobs.Count > 0
+            ? $"[bold]{data.Jobs.Count}[/] [{mut}]running[/]"
+            : $"[{suc}]✓[/] No jobs running";
 
-        // ── Graphs (observer activity, event throughput, top event types) ──────────────────────────
+        // ── Graphs (observers over time, event throughput, top event types) ────────────────────────
         UpdateObserverSparkline(data.Observers.Count);
         UpdateThroughput(data.TailSequenceNumber);
         UpdateTopTypes(data, mut, Theme.Teal.ToMarkup());
@@ -331,6 +333,15 @@ public class OverviewView : IWorkbenchView
         }
 
         _throughputSparkline.SetDataPoints(_eventHistory);
+
+        // The sparkline is blank when every recent delta is 0, which reads as "broken". Reflect the
+        // idle/active state in the panel header so the empty box reads as intentional.
+        if (_throughputPanel is { } panel)
+        {
+            panel.Header = _eventHistory.Any(v => v > 0)
+                ? $" EVENT THROUGHPUT · +{(long)delta}/tick "
+                : " EVENT THROUGHPUT · idle ";
+        }
     }
 
     /// <summary>

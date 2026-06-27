@@ -26,6 +26,9 @@ public class ApplicationsView : FilterableTableView<Application>
     protected override string? PageTitle => "APPLICATIONS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No applications registered.";
+
+    /// <inheritdoc/>
     protected override IEnumerable<Application> GetItems(WorkbenchData data) =>
         data.Applications.OrderBy(a => a.ClientId);
 

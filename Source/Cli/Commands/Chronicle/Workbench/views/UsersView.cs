@@ -25,6 +25,9 @@ public class UsersView : FilterableTableView<User>
     protected override string? PageTitle => "USERS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No users.";
+
+    /// <inheritdoc/>
     protected override IEnumerable<User> GetItems(WorkbenchData data) =>
         data.Users.OrderBy(u => u.Username);
 

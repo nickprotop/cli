@@ -41,21 +41,13 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
     protected override string? PageTitle => "READ MODELS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No read models defined.";
+
+    /// <inheritdoc/>
     public override void PopulateContent(SharpConsoleUI.Controls.ScrollablePanelControl panel, ConsoleWindowSystem windowSystem)
     {
         _windowSystem = windowSystem;
         base.PopulateContent(panel, windowSystem);
-    }
-
-    /// <summary>
-    /// Opens a detail overlay for the currently selected read model row, if any.
-    /// </summary>
-    public void OpenSelectedDetailOverlay()
-    {
-        if (SelectedItem is WorkbenchReadModel rm)
-        {
-            OpenDetailOverlay(rm);
-        }
     }
 
     /// <summary>

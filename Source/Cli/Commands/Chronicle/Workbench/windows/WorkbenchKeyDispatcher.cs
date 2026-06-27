@@ -134,11 +134,6 @@ public class WorkbenchKeyDispatcher(
                 e.Handled = true;
                 break;
 
-            case ConsoleKey.Enter when idx == WorkbenchNavigation.IndexReadModels:
-                overlays.OpenReadModelDetail();
-                e.Handled = true;
-                break;
-
             case ConsoleKey.P when e.KeyInfo.Modifiers.HasFlag(ConsoleModifiers.Control):
                 overlays.OpenCommandPalette();
                 e.Handled = true;

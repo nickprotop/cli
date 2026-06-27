@@ -65,6 +65,9 @@ public class JobsView : FilterableTableView<Job>
     protected override string? PageTitle => "JOBS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No background jobs running.";
+
+    /// <inheritdoc/>
     protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];

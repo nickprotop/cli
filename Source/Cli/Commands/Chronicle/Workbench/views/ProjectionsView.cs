@@ -28,6 +28,9 @@ public class ProjectionsView : FilterableTableView<ProjectionDefinition>
     protected override string? PageTitle => "PROJECTIONS";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No projections defined.";
+
+    /// <inheritdoc/>
     protected override IEnumerable<ProjectionDefinition> GetItems(WorkbenchData data) =>
         data.ProjectionDefinitions.OrderBy(d => d.Identifier);
 

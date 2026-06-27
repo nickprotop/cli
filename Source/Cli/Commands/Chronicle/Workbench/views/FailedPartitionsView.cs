@@ -69,6 +69,9 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
     protected override string? PageTitle => "FAILURES";
 
     /// <inheritdoc/>
+    protected override string EmptyStateMessage => "No failed partitions — all healthy.";
+
+    /// <inheritdoc/>
     protected override IReadOnlyList<ViewAction> GetToolbarActionTemplate()
     {
         List<ViewAction> actions = [];

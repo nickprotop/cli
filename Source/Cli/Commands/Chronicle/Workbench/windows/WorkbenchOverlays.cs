@@ -190,18 +190,6 @@ public class WorkbenchOverlays(
     }
 
     /// <summary>
-    /// Opens the detail overlay for the currently selected read model entry.
-    /// No-op when the Read Models view is not active or nothing is selected.
-    /// </summary>
-    public void OpenReadModelDetail()
-    {
-        if (views[WorkbenchNavigation.IndexReadModels] is ReadModelsView rmv)
-        {
-            rmv.OpenSelectedDetailOverlay();
-        }
-    }
-
-    /// <summary>
     /// Copies the detail pane content of the active view to the system clipboard.
     /// Shows a brief confirmation message in the top panel.
     /// No-op when no content is available.
