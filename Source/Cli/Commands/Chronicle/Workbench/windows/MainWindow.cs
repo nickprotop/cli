@@ -28,6 +28,9 @@ public class MainWindow(
     WorkbenchData initialData,
     WorkbenchState state)
 {
+    /// <summary>How much to darken the main window (0..1) while a modal dialog is open.</summary>
+    const float ModalDimIntensity = 0.85f;
+
     readonly IWorkbenchView[] _views = WorkbenchViewRegistry.CreateViews();
 
     string? _activeEventStore;
@@ -151,6 +154,19 @@ public class MainWindow(
             builtWindow.ActiveBorderForegroundColor = theme.DimAccent;
             builtWindow.InactiveBorderForegroundColor = theme.DimAccent;
         };
+
+        // Dim the main window while a modal dialog is open, so the dialog reads as the focus. The
+        // post-paint hook darkens the rendered buffer; a modal open/close forces a repaint so the dim
+        // appears and clears immediately.
+        builtWindow.PostBufferPaint += (buffer, _, _) =>
+        {
+            if (windowSystem.ModalStateService.HasModals)
+            {
+                ColorBlendHelper.ApplyColorOverlay(buffer, SharpConsoleUI.Color.Black, ModalDimIntensity);
+            }
+        };
+
+        windowSystem.ModalStateService.StateChanged += (_, _) => builtWindow.Invalidate(true);
 
         _window = builtWindow;
 

@@ -46,6 +46,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     WorkbenchData? _pendingData;
     string _currentFilter = string.Empty;
     List<TItem> _allItems = [];
+    string? _emptyState;
     int _pageIndex;
 
     int _lastAppliedSortColumn = -1;
@@ -848,25 +849,21 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
 
         _table.ClearRows();
 
-        if (sorted.Count == 0)
-        {
-            // Distinguish "no data" from "no filter matches" so a blank grid never reads as broken.
-            var message = string.IsNullOrEmpty(_currentFilter)
-                ? EmptyStateMessage
-                : $"No matches for '{_currentFilter}'";
-            var cells = new string[Columns.Count];
-            cells[0] = $"[{Theme.Muted.ToMarkup()}]{message}[/]";
-            for (var i = 1; i < cells.Length; i++)
-            {
-                cells[i] = string.Empty;
-            }
-
-            _table.AddRow(new UITableRow(cells));
-        }
-
         foreach (var item in sorted.Skip(_pageIndex * pageSize).Take(pageSize))
         {
             _table.AddRow(new UITableRow(BuildRow(item)) { Tag = item });
+        }
+
+        // When there are no rows, surface guidance in the detail pane rather than as a table row — the
+        // table has no per-row way to opt out of the checkbox column, so a placeholder row would render
+        // a stray "[ ]" in checkbox-mode views.
+        if (sorted.Count > 0)
+        {
+            _emptyState = null;
+        }
+        else
+        {
+            _emptyState = string.IsNullOrEmpty(_currentFilter) ? EmptyStateMessage : $"No matches for '{_currentFilter}'";
         }
 
         // Restore sort indicator on the column header. Rows are already in sorted order from
@@ -962,7 +959,11 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             return;
         }
 
-        _detailPanel.Content = RenderDetail(SelectedItem, _pendingData);
+        // With no rows, show the empty-state guidance in the detail pane (the table itself is blank);
+        // otherwise render the selected item's detail.
+        _detailPanel.Content = _emptyState is { } empty
+            ? $"[{Theme.Muted.ToMarkup()}]{empty}[/]"
+            : RenderDetail(SelectedItem, _pendingData);
     }
 
     void ActivateSelected()
