@@ -25,10 +25,20 @@ public class WorkbenchStatusBar
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkbenchStatusBar"/> class and builds the
-    /// <see cref="StatusBarControl"/>.
+    /// <see cref="StatusBarControl"/>. The left key hints are clickable and fire the same action as their
+    /// shortcut; the actions are passed as delegates so they can resolve subsystems built later.
     /// </summary>
     /// <param name="theme">The workbench theme, used to color the connection indicator by state.</param>
-    public WorkbenchStatusBar(WorkbenchTheme theme)
+    /// <param name="onQuit">Invoked when the Quit hint is clicked.</param>
+    /// <param name="onPalette">Invoked when the Palette hint is clicked.</param>
+    /// <param name="onHelp">Invoked when the Help hint is clicked.</param>
+    /// <param name="onFilter">Invoked when the Filter hint is clicked.</param>
+    public WorkbenchStatusBar(
+        WorkbenchTheme theme,
+        Action onQuit,
+        Action onPalette,
+        Action onHelp,
+        Action onFilter)
     {
         _theme = theme;
         _connectionItem = new StatusBarItem { Label = "● Connecting…" };
@@ -37,11 +47,11 @@ public class WorkbenchStatusBar
         _contextItem = new StatusBarItem { Label = string.Empty };
 
         Control = Controls.StatusBar()
-            .AddLeft("Q", "Quit")
-            .AddLeft("Ctrl+P", "Palette")
+            .AddLeft("Q", "Quit", onQuit)
+            .AddLeft("Ctrl+P", "Palette", onPalette)
             .AddLeftSeparator()
-            .AddLeft("?", "Help")
-            .AddLeft("F", "Filter")
+            .AddLeft("?", "Help", onHelp)
+            .AddLeft("F", "Filter", onFilter)
             .AddLeftSeparator()
             .AddLeft("F9/F10/F11", "Theme")
             .AddRight(_connectionItem)

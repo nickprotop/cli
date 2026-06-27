@@ -77,22 +77,18 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
             $"[{mut}]Queryable[/]    [{queryableColor}]{(rm.IsQueryable ? "Yes" : "No")}[/]",
             $"[{mut}]Identifier[/]   {rm.Identifier}");
 
-        // Open immediately with a placeholder for the Instances tab, then fetch off the UI thread so
-        // activating a row never blocks (or deadlocks) the render loop. The fetched content is pushed
-        // back into the tab editor on the UI thread once it arrives.
-        const string instancesTab = "Instances";
+        string Document(string instances) =>
+            $"{infoContent}\n\n[{acc}][bold]Instances[/][/]\n{instances}";
+
+        // Open immediately with a placeholder for the instances, then fetch off the UI thread so
+        // activating a row never blocks (or deadlocks) the render loop. The fetched content replaces the
+        // placeholder on the UI thread once it arrives.
         var loadingContent = OnFetchInstances is null
             ? $"[{mut}](No instance loader configured)[/]"
             : $"[{mut}]Loading instances…[/]";
 
-        List<(string TabName, string Content)> tabs =
-        [
-            ("Info", infoContent),
-            (instancesTab, loadingContent)
-        ];
-
         var overlay = new DetailOverlayWindow();
-        var window = overlay.Build(_windowSystem, $" {rm.ContainerName} ", tabs, []);
+        var window = overlay.Build(_windowSystem, $" {rm.ContainerName} ", Document(loadingContent), []);
         _windowSystem.AddWindow(window, activateWindow: true);
 
         if (OnFetchInstances is null)
@@ -103,15 +99,9 @@ public class ReadModelsView : FilterableTableView<WorkbenchReadModel>
         var windowSystem = _windowSystem;
         _ = Task.Run(async () =>
         {
-            var content = await FetchInstancesContentAsync(rm).ConfigureAwait(false);
+            var instances = await FetchInstancesContentAsync(rm).ConfigureAwait(false);
             windowSystem.EnqueueOnUIThread(() =>
-            {
-                if (overlay.TabEditors.TryGetValue(instancesTab, out var editor))
-                {
-                    // The overlay strips markup to plain text for its read-only editors.
-                    editor.SetContent(Markup.Remove(content));
-                }
-            });
+                overlay.Content?.SetContent([.. Document(instances).Split('\n')]));
         });
     }
 

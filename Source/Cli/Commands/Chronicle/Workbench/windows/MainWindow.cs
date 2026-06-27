@@ -41,6 +41,7 @@ public class MainWindow(
     WorkbenchNavigation? _navigation;
     WorkbenchRefreshLoop? _refreshLoop;
     WorkbenchOverlays? _overlays;
+    WorkbenchKeyDispatcher? _keyDispatcher;
 
     /// <summary>Gets the active event store — the user-selected one, or the configured default.</summary>
     string ActiveEventStore => _activeEventStore ?? settings.ResolveEventStore();
@@ -89,7 +90,14 @@ public class MainWindow(
             () => _ = Task.Run(() => _refreshLoop!.FetchAndUpdate(CancellationToken.None)),
             () => _refreshLoop?.CurrentData);
 
-        var statusBarHelper = new WorkbenchStatusBar(theme);
+        // The status-bar key hints are clickable. The actions resolve the overlays/dispatcher lazily
+        // because those subsystems are constructed just below, after the status bar.
+        var statusBarHelper = new WorkbenchStatusBar(
+            theme,
+            onQuit: () => _keyDispatcher?.Quit(),
+            onPalette: () => _overlays?.OpenCommandPalette(),
+            onHelp: () => _overlays?.OpenHelpOverlay(),
+            onFilter: () => _keyDispatcher?.ActivateCurrentFilter());
 
         _refreshLoop = new WorkbenchRefreshLoop(
             dataService,
@@ -115,7 +123,8 @@ public class MainWindow(
             state,
             () => _window,
             () => _refreshLoop?.UpdateStatusBar());
-        var menuBar = new WorkbenchMenuBar(_navigation, overlays, windowSystem, settings, state).Build();
+        _keyDispatcher = keyDispatcher;
+        var menuBar = new WorkbenchMenuBar(_navigation, overlays, windowSystem, () => _keyDispatcher?.Quit()).Build();
         var navView = _navigation.BuildNavigationView();
 
         _refreshLoop.Initialize(initialData);

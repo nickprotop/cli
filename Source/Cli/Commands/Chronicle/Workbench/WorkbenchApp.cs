@@ -31,7 +31,11 @@ public class WorkbenchApp(WorkbenchDataService dataService, WorkbenchSettings se
             new NetConsoleDriver(RenderMode.Buffer),
             options: new ConsoleWindowSystemOptions(
                 TopPanelConfig: panel => panel.Left(Elements.StatusText(string.Empty)),
-                ShowBottomPanel: false));
+                ShowBottomPanel: false,
+
+                // Disable the framework's built-in Ctrl+Q hard exit so all exits route through the
+                // workbench's graceful, state-saving quit confirmation.
+                ExitKey: null));
 
         windowSystem.PanelStateService.TopStatus = "◆ CHRONICLE WORKBENCH";
 

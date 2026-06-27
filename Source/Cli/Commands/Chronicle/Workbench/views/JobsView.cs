@@ -153,20 +153,6 @@ public class JobsView : FilterableTableView<Job>
             }
         }
 
-        if (OnStopJob is not null || OnResumeJob is not null)
-        {
-            lines.Add(string.Empty);
-            if (OnStopJob is not null)
-            {
-                lines.Add($"[{mut}]Press[/] [bold]S[/] [{mut}]to stop[/]");
-            }
-
-            if (OnResumeJob is not null)
-            {
-                lines.Add($"[{mut}]Press[/] [bold]U[/] [{mut}]to resume[/]");
-            }
-        }
-
         return string.Join('\n', lines);
     }
 

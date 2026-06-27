@@ -514,27 +514,56 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
     protected void OnRowActivated(TItem item) => OnInspect(item);
 
     /// <summary>
-    /// Inspects the activated row. The default ensures the detail pane is visible, so activation always
-    /// reveals more about the row without changing anything. Views with a richer read view (e.g. a
-    /// definition or instances overlay) override this to open it.
+    /// Inspects the activated row. The default opens a read-only detail overlay (a reading modal) built
+    /// from <see cref="RenderDetail"/>, so activating a row always surfaces its full detail. Views with a
+    /// richer read view (e.g. a tabbed instances overlay, or navigating to a definition) override this.
     /// </summary>
     /// <param name="item">The row to inspect.</param>
-    protected virtual void OnInspect(TItem item) => ShowDetailPane();
+    protected virtual void OnInspect(TItem item) => ShowReadingModal(item);
 
     /// <summary>
-    /// Ensures the detail pane is visible (opening it if currently collapsed). Used as the default
-    /// inspect gesture so activating a row always reveals its detail.
+    /// Opens a read-only detail overlay (reading modal) for the given row. The body markup is supplied by
+    /// the caller — defaulting to <see cref="RenderDetail"/>, but overridable so a view can embed richer
+    /// or different content in the modal than in the side pane. The view's single-item actions (replay,
+    /// retry, stop, …) are surfaced as buttons so they can be triggered directly from the modal.
     /// </summary>
-    protected void ShowDetailPane()
+    /// <param name="item">The row to display.</param>
+    /// <param name="content">
+    /// The body markup; when <see langword="null"/>, falls back to <see cref="RenderDetail"/> for the item.
+    /// </param>
+    protected void ShowReadingModal(TItem item, string? content = null)
     {
-        if (_root is null || _detailPaneVisible)
+        if (_windowSystem is null)
         {
             return;
         }
 
-        _detailPaneVisible = true;
-        _root.AnimateColumnWidth(1, DetailPaneWidth, TimeSpan.FromMilliseconds(180), EasingFunctions.EaseInOut);
+        var body = content ?? RenderDetail(item, _pendingData);
+        var title = $" {GetDetailTitle(item)} ";
+
+        // Surface the single-item actions (those bound to a row, identified by a trigger key) as buttons,
+        // with the shortcut embedded in the caption (e.g. "Replay (R)") and the key itself live inside the
+        // modal. Bulk actions operate on checked rows, not the single inspected item, so they are excluded.
+        var actions = GetToolbarActionTemplate()
+            .Where(a => a.TriggerKey is not null)
+            .Select(a => (
+                Label: a.KeyHint is { } key ? $"{a.Label} ({key})" : a.Label,
+                Key: a.TriggerKey,
+                a.Execute))
+            .ToList();
+
+        var overlay = new DetailOverlayWindow();
+        var window = overlay.Build(_windowSystem, title, body, actions);
+        _windowSystem.AddWindow(window, activateWindow: true);
     }
+
+    /// <summary>
+    /// Gets the title for the reading modal opened on row activation. Defaults to the row key; views
+    /// override for a friendlier label (e.g. an observer or container name).
+    /// </summary>
+    /// <param name="item">The row being inspected.</param>
+    /// <returns>The modal title text.</returns>
+    protected virtual string GetDetailTitle(TItem item) => GetKey(item);
 
     /// <summary>
     /// Builds the muted "Select a/an &lt;noun&gt;." prompt shown in the detail pane when no row is selected.

@@ -9,59 +9,57 @@ using SharpConsoleUI.Themes;
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
 /// <summary>
-/// Builds a modal overlay window for displaying item detail in tabbed panes with optional action buttons.
+/// Builds a modal overlay window for displaying read-only item detail, with optional action buttons.
+/// The detail is a single scrolling markup document that fills the dialog body.
 /// </summary>
 public class DetailOverlayWindow
 {
-    readonly Dictionary<string, MultilineEditControl> _tabEditors = [];
+    MarkupControl? _content;
     Window? _window;
 
     /// <summary>
-    /// Gets the read-only editors backing each tab, keyed by tab name. Lets callers update a tab's
-    /// content after <see cref="Build"/> (for example, when a tab is populated by an async fetch).
+    /// Gets the markup control backing the detail body. Lets callers replace the content after
+    /// <see cref="Build"/> (for example, when part of the detail is populated by an async fetch) via
+    /// <see cref="MarkupControl.SetContent"/>.
     /// </summary>
-    public IReadOnlyDictionary<string, MultilineEditControl> TabEditors => _tabEditors;
+    public MarkupControl? Content => _content;
 
     /// <summary>
-    /// Builds a detail overlay window with the specified title, tabbed content, and action buttons.
+    /// Builds a detail overlay window with the specified title, markup content, and action buttons.
     /// </summary>
     /// <param name="windowSystem">The SharpConsoleUI window system used to close the window on Escape.</param>
     /// <param name="title">The overlay window title.</param>
-    /// <param name="tabs">
-    /// A list of <c>(TabName, Content)</c> tuples. Each tab displays its markup content in a scrollable panel.
-    /// </param>
+    /// <param name="content">The detail content as markup (colors are rendered, not stripped).</param>
     /// <param name="actions">
-    /// A list of <c>(Label, Execute)</c> tuples. Each entry produces a toolbar button that invokes the callback.
+    /// A list of <c>(Label, Key, Execute)</c> tuples. Each entry produces a button that invokes the
+    /// callback; when <c>Key</c> is set, that key also triggers the action while the modal is open.
     /// </param>
     /// <returns>A configured <see cref="Window"/> ready to be passed to <c>windowSystem.AddWindow</c>.</returns>
     public Window Build(
         ConsoleWindowSystem windowSystem,
         string title,
-        IReadOnlyList<(string TabName, string Content)> tabs,
-        IReadOnlyList<(string Label, Action Execute)> actions)
+        string content,
+        IReadOnlyList<(string Label, ConsoleKey? Key, Action Execute)> actions)
     {
         var theme = new WorkbenchTheme(windowSystem);
-        var tabBuilder = Controls.TabControl();
 
-        foreach (var (tabName, content) in tabs)
-        {
-            // Use a read-only MultilineEdit so text can be selected with mouse/keyboard and copied.
-            // Markup is stripped to plain text — colors are not rendered in editable controls.
-            var plainText = Markup.Remove(content);
-            var editor = Controls.MultilineEdit(plainText)
-                .AsReadOnly(true)
-                .WrapWords()
-                .WithVerticalScrollbar(ScrollbarVisibility.Auto)
-                .WithSelectionColors(theme.Accent, theme.Background)
-                .WithFocusedColors(theme.Foreground, theme.Background)
-                .Build();
+        // A markup control (rendering colors) hosted in a vertically-filling scrollable panel: the panel
+        // fills the dialog body and scrolls when the detail overflows.
+        _content = Controls.Markup()
+            .AddLines(content.Split('\n'))
+            .WithMargin(1, 1, 1, 1)
+            .Build();
 
-            tabBuilder.AddTab(tabName, editor);
-            _tabEditors[tabName] = editor;
-        }
+        var panel = Controls.ScrollablePanel()
+            .WithVerticalAlignment(SharpConsoleUI.Layout.VerticalAlignment.Fill)
+            .WithVerticalScroll(ScrollMode.Scroll)
+            .WithPadding(1, 0, 1, 0)
+            .Build();
+        panel.AddControl(_content);
 
-        var tabControl = tabBuilder.Fill().Build();
-
+        // Close the reading modal before running the action, so the action's own UI (a confirm dialog or
+        // toast) is not stacked underneath it. CloseOnAction handles the button-click path; the key path
+        // below closes explicitly before executing.
         var dialogButtons = actions
             .Select(a => new DialogButton(a.Label, ColorRole.Primary, a.Execute))
             .ToList();
@@ -70,14 +68,31 @@ public class DetailOverlayWindow
             windowSystem,
             theme,
             title,
-            [tabControl],
+            [panel],
             dialogButtons,
             new DialogOptions
             {
                 FillBody = true,
-                CloseOnAction = false,
+                CloseOnAction = true,
                 Width = Math.Min(120, Console.WindowWidth - 4),
-                Height = Math.Min(35, Console.WindowHeight - 4)
+                Height = Math.Min(35, Console.WindowHeight - 4),
+
+                // Let the action shortcut keys fire while the modal is open — close first, then run, so a
+                // button captioned "Replay (R)" responds to R exactly like its click, matching the view.
+                OnKey = (keyInfo, close) =>
+                {
+                    foreach (var action in actions)
+                    {
+                        if (action.Key is { } key && keyInfo.Key == key)
+                        {
+                            close();
+                            action.Execute();
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
             });
 
         return _window;

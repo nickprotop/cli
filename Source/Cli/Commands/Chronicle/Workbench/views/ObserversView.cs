@@ -131,12 +131,6 @@ public class ObserversView : FilterableTableView<ObserverInformation>
             lines.Add($"  • {et.Id} gen {et.Generation}");
         }
 
-        if (OnReplay is not null)
-        {
-            lines.Add(string.Empty);
-            lines.Add($"[{mut}]Press[/] [bold]R[/] [{mut}]to replay[/]");
-        }
-
         return string.Join('\n', lines);
     }
 

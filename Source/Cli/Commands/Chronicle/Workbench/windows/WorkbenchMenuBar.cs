@@ -13,14 +13,12 @@ namespace Cratis.Cli.Commands.Chronicle.Workbench;
 /// <param name="navigation">Navigation — wired to Ctrl+E / Ctrl+N quick-switch actions.</param>
 /// <param name="overlays">Overlays — wired to Help menu items.</param>
 /// <param name="windowSystem">The window system — used for theme switching.</param>
-/// <param name="settings">Workbench settings — used by the Quit action to persist the refresh interval.</param>
-/// <param name="state">Workbench state — used by the Quit action to persist the last active navigation index.</param>
+/// <param name="onQuit">The graceful quit action, shared with the Quit shortcut and status-bar hint.</param>
 public class WorkbenchMenuBar(
     WorkbenchNavigation navigation,
     WorkbenchOverlays overlays,
     ConsoleWindowSystem windowSystem,
-    WorkbenchSettings settings,
-    WorkbenchState state)
+    Action onQuit)
 {
     /// <summary>
     /// Builds and returns the configured horizontal sticky <see cref="MenuControl"/>.
@@ -36,13 +34,7 @@ public class WorkbenchMenuBar(
                 .AddItem("Switch Event Store", "Ctrl+E", () => navigation.OpenEventStorePicker())
                 .AddItem("Switch Namespace", "Ctrl+N", () => navigation.OpenNamespacePicker())
                 .AddSeparator()
-                .AddItem("Quit", "Q", () =>
-                {
-                    state.Interval = settings.Interval;
-                    state.LastNavIndex = navigation.CurrentViewIndex;
-                    state.Save();
-                    Environment.Exit(0);
-                }))
+                .AddItem("Quit", "Q", onQuit))
             .AddItem("Help", BuildHelpMenu)
             .Build();
 

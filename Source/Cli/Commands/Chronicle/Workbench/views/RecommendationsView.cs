@@ -129,17 +129,6 @@ public class RecommendationsView : FilterableTableView<Recommendation>
             lines.Add($"  {item.Description}");
         }
 
-        lines.Add(string.Empty);
-        if (OnApply is not null)
-        {
-            lines.Add($"[{mut}]Press[/] [bold]A[/] [{mut}]to apply[/]");
-        }
-
-        if (OnIgnore is not null)
-        {
-            lines.Add($"[{mut}]Press[/] [bold]I[/] [{mut}]to ignore[/]");
-        }
-
         return string.Join('\n', lines);
     }
 

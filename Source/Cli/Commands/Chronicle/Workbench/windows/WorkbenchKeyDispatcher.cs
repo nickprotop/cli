@@ -2,7 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using SharpConsoleUI;
+using SharpConsoleUI.Builders;
 using SharpConsoleUI.Controls;
+using SharpConsoleUI.Themes;
 
 namespace Cratis.Cli.Commands.Chronicle.Workbench;
 
@@ -44,6 +46,7 @@ public class WorkbenchKeyDispatcher(
     const int MaxInterval = 60;
 
     bool _sidebarExpanded = true;
+    bool _quitConfirmOpen;
 
     /// <summary>
     /// Dispatches a key press to the appropriate workbench action.
@@ -231,10 +234,7 @@ public class WorkbenchKeyDispatcher(
             case ConsoleKey.Q:
                 if (!e.AlreadyHandled)
                 {
-                    state.Interval = settings.Interval;
-                    state.LastNavIndex = navigation.CurrentViewIndex;
-                    state.Save();
-                    Environment.Exit(0);
+                    Quit();
                 }
 
                 break;
@@ -251,6 +251,93 @@ public class WorkbenchKeyDispatcher(
 
                 break;
         }
+    }
+
+    /// <summary>
+    /// Asks the user to confirm, then persists workbench state and gracefully shuts the application down.
+    /// The same action invoked by the Quit shortcut and the clickable status-bar hint.
+    /// </summary>
+    public void Quit()
+    {
+        if (_quitConfirmOpen)
+        {
+            return;
+        }
+
+        _quitConfirmOpen = true;
+        var theme = new WorkbenchTheme(windowSystem);
+        var acc = theme.Accent.ToMarkup();
+        var mut = theme.Muted.ToMarkup();
+
+        var body = Controls.Markup()
+            .AddEmptyLine()
+            .AddLine($"  [{mut}]Exit the Chronicle workbench?[/]")
+            .AddEmptyLine()
+            .AddLine($"  [bold {acc}]Enter[/] [{mut}]quit[/]   [bold {acc}]Esc[/] [{mut}]cancel[/]")
+            .AddEmptyLine()
+            .Build();
+
+        void Quitting()
+        {
+            state.Interval = settings.Interval;
+            state.LastNavIndex = navigation.CurrentViewIndex;
+            state.Save();
+            windowSystem.Shutdown(0);
+        }
+
+        var dialog = WorkbenchUi.BuildDialog(
+            windowSystem,
+            theme,
+            "Quit",
+            [body],
+            [new DialogButton("Quit", ColorRole.Primary, Quitting)],
+            new DialogOptions
+            {
+                Width = 48,
+                Height = 9,
+                CloseOnAction = true,
+
+                // Enter confirms (quit-focused — this is a deliberate, non-destructive action); Esc cancels.
+                OnKey = (key, close) =>
+                {
+                    switch (key.Key)
+                    {
+                        case ConsoleKey.Enter:
+                            close();
+                            Quitting();
+                            return true;
+
+                        case ConsoleKey.Escape:
+                            close();
+                            return true;
+
+                        default:
+                            return false;
+                    }
+                }
+            });
+
+        // Clear the guard on every close path (Esc, the X / Close button, outside-click, or programmatic)
+        // so the confirm can be reopened — otherwise it would only ever show once.
+        dialog.OnClosed += (_, _) => _quitConfirmOpen = false;
+
+        windowSystem.AddWindow(dialog, activateWindow: true);
+    }
+
+    /// <summary>
+    /// Focuses the current view's filter prompt. The same action invoked by the Filter shortcut and the
+    /// clickable status-bar hint.
+    /// </summary>
+    public void ActivateCurrentFilter()
+    {
+        var idx = navigation.CurrentViewIndex;
+        var window = getWindow();
+        if (idx < 0 || idx >= views.Length || window is null)
+        {
+            return;
+        }
+
+        views[idx].ActivateFilter(window);
     }
 
     void FocusNavigation()
@@ -317,18 +404,6 @@ public class WorkbenchKeyDispatcher(
 
         settings.Interval = updated;
         onIntervalChanged();
-    }
-
-    void ActivateCurrentFilter()
-    {
-        var idx = navigation.CurrentViewIndex;
-        var window = getWindow();
-        if (idx < 0 || idx >= views.Length || window is null)
-        {
-            return;
-        }
-
-        views[idx].ActivateFilter(window);
     }
 
     bool DispatchCurrentViewAction(ConsoleKey key, ConsoleModifiers modifiers)

@@ -141,20 +141,6 @@ public class FailedPartitionsView : FilterableTableView<FailedPartition>
             }
         }
 
-        if (OnRetryPartition is not null || OnReplayPartition is not null)
-        {
-            lines.Add(string.Empty);
-            if (OnRetryPartition is not null)
-            {
-                lines.Add($"[{mut}]Press[/] [bold]T[/] [{mut}]to retry[/]");
-            }
-
-            if (OnReplayPartition is not null)
-            {
-                lines.Add($"[{mut}]Press[/] [bold]P[/] [{mut}]to replay[/]");
-            }
-        }
-
         return string.Join('\n', lines);
     }
 

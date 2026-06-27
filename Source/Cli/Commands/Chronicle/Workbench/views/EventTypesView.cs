@@ -74,6 +74,9 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
     protected override string GetKey(EventTypeRegistration item) => $"{item.Type.Id}+{item.Type.Generation}";
 
     /// <inheritdoc/>
+    protected override string GetDetailTitle(EventTypeRegistration item) => item.Type.Id;
+
+    /// <inheritdoc/>
     protected override string[] BuildRow(EventTypeRegistration item) =>
         [item.Type.Id, item.Type.Generation.ToString().PadLeft(6), item.Owner.ToString()];
 
@@ -100,10 +103,7 @@ public class EventTypesView : FilterableTableView<EventTypeRegistration>
             $"[{mut}]Tombstone[/]    {item.Type.Tombstone}",
             string.Empty,
             $"[{acc}]Schema:[/]",
-            schemaContent,
-            string.Empty,
-            $"[{acc}]Actions:[/]",
-            $"  [{mut}][V][/] View observers for this type"
+            schemaContent
         });
     }
 
