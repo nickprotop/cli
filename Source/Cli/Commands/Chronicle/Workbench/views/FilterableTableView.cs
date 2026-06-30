@@ -266,6 +266,7 @@ public abstract class FilterableTableView<TItem> : IWorkbenchView
             .AddControl(_table)
             .AddControl(pageNavRow)
             .WithVerticalScroll(ScrollMode.None)
+            .WithAlignment(SharpConsoleUI.Layout.HorizontalAlignment.Stretch)
             .Build();
 
         // Main two-column shell: left pane (flex) | detail panel (fixed width) with a draggable splitter.
